@@ -15,14 +15,14 @@ tracker:
   # If null, calculated from FPS:
   # video.fps * auto_max_disappeared_seconds
   max_disappeared: null
-  auto_max_disappeared_seconds: 1.5
+  auto_max_disappeared_seconds: 3
   auto_max_disappeared_min: 5
   auto_max_disappeared_max: 50
 
   # If null, calculated from FPS:
   # auto_max_distance_base * auto_max_distance_reference_fps / video.fps
   max_distance: null
-  auto_max_distance_base: 50
+  auto_max_distance_base: 500
   auto_max_distance_reference_fps: 30
   auto_max_distance_cap: 200
 

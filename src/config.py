@@ -37,6 +37,21 @@ class Config:
 
         return value
 
+    def get_raw(self, key: str, default: Any = None) -> Any:
+        """Get configuration value by dot notation, preserving explicit null values."""
+        keys = key.split('.')
+        value = self.config
+
+        for k in keys:
+            if isinstance(value, dict):
+                if k not in value:
+                    return default
+                value = value[k]
+            else:
+                return default
+
+        return value
+
     def __getitem__(self, key: str) -> Any:
         """Allow dict-like access."""
         return self.config[key]

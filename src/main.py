@@ -49,15 +49,73 @@ class ObjectCounterApp:
         device = self.config.get("detector.device", "cuda")
         self.detector = ObjectDetector(model, confidence, device)
 
-        max_disappeared = self.config.get("tracker.max_disappeared", 50)
-        max_distance = self.config.get("tracker.max_distance", 50)
+        fps = self._get_configured_fps()
+        max_disappeared = self._resolve_max_disappeared(fps)
+        max_distance = self._resolve_max_distance(fps)
         self.tracker = CentroidTracker(max_disappeared, max_distance)
+
+        print(
+            "Tracker settings: "
+            f"fps={fps:.2f}, "
+            f"max_disappeared={max_disappeared}, "
+            f"max_distance={max_distance:.2f}"
+        )
 
         self.counter = ObjectCounter()
         self.metrics = PerformanceMetrics()
 
         font_size = self.config.get("display.font_size", 1.0)
         self.renderer = FrameRenderer(font_size)
+
+    def _get_configured_fps(self) -> float:
+        """Get FPS value used for FPS-dependent tracker settings."""
+        fps = self.config.get("video.fps", 30)
+
+        if fps is None or fps <= 0:
+            return 30.0
+
+        return float(fps)
+
+    def _resolve_max_distance(self, fps: float) -> float:
+        """Resolve max centroid matching distance from config."""
+        max_distance = self.config.get_raw("tracker.max_distance")
+
+        if max_distance is not None:
+            return float(max_distance)
+
+        base = self.config.get("tracker.auto_max_distance_base", 50)
+        reference_fps = self.config.get("tracker.auto_max_distance_reference_fps", 30)
+        cap = self.config.get("tracker.auto_max_distance_cap", 200)
+
+        if fps <= 0:
+            fps = float(reference_fps)
+
+        resolved_distance = float(base) * float(reference_fps) / fps
+
+        if cap is not None:
+            resolved_distance = min(resolved_distance, float(cap))
+
+        return resolved_distance
+
+    def _resolve_max_disappeared(self, fps: float) -> int:
+        """Resolve max disappeared frames from config."""
+        max_disappeared = self.config.get_raw("tracker.max_disappeared")
+
+        if max_disappeared is not None:
+            return int(max_disappeared)
+
+        auto_seconds = self.config.get("tracker.auto_max_disappeared_seconds", 1.5)
+        resolved_frames = round(fps * float(auto_seconds))
+
+        min_frames = self.config.get("tracker.auto_max_disappeared_min", 5)
+        max_frames = self.config.get("tracker.auto_max_disappeared_max", 50)
+
+        resolved_frames = max(int(min_frames), resolved_frames)
+
+        if max_frames is not None:
+            resolved_frames = min(resolved_frames, int(max_frames))
+
+        return resolved_frames
 
     def run(self) -> None:
         print("Starting object counter. Press 'q' to exit.")
