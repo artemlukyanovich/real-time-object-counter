@@ -1,136 +1,86 @@
-# Project Overview — Real-time Object Counter
+# Обзор проекта: Real-time Object Counter
 
-## Project Purpose
+## Назначение
 
-This project is a real-time computer vision system designed to:
+Система компьютерного зрения для детекции, трекинга и подсчёта объектов в реальном времени. Принимает видеопоток (веб-камера или видеофайл), распознаёт объекты с помощью YOLOv8, присваивает каждому уникальный ID и подсчитывает их — опционально в пределах заданной полигональной зоны.
 
-- detect objects in a video stream
-- track them across frames
-- count objects crossing a virtual line
-- measure performance (FPS, latency)
+Целевые сценарии: мониторинг трафика, подсчёт людей, аналитика на борту БПЛА с edge-устройствами.
 
-The project is intended as a learning and engineering exercise in:
-
-- real-time CV pipelines
-- performance optimization
-- edge AI systems
+**Ограничения среды:** ноутбук с RTX 3050 Ti (~4 ГБ VRAM), цель — 20–30 FPS в реальном времени.
 
 ---
 
-## Core Features
+## Архитектура системы
 
-- Real-time object detection (YOLO)
-- Object tracking (ByteTrack)
-- Line-crossing object counting
-- FPS and latency monitoring
-- Support for webcam and video input
+Линейный pipeline покадровой обработки:
 
----
+```
+VideoSource → Detector → Tracker → Counter → Renderer → Display
+```
 
-## Tech Stack
-
-- Python
-- PyTorch
-- OpenCV
-- YOLO (Ultralytics)
-- ByteTrack
-- NumPy
+Каждый компонент — независимый класс с чётко определённым интерфейсом. Оркестрацию выполняет `ObjectCounterApp` в `src/main.py`. Производительность отслеживается через отдельный модуль `metrics`.
 
 ---
 
-## Architecture Summary
+## Основные компоненты
 
-Pipeline:
+### video_source — `src/video_source.py`
 
-VideoSource → Detector → Tracker → Counter → Renderer
+Абстракция над источником видео: унифицирует работу с веб-камерой (`cv2.VideoCapture(0)`) и видеофайлом. Выполняет захват кадра, ресайз до заданного разрешения и подсчёт кадров. Поддерживает контекстный менеджер для корректного освобождения ресурсов.
 
-Each component is modular and can be replaced independently.
+### detector — `src/detector.py`
 
----
+Выполняет инференс YOLOv8 на каждом кадре. Конвертирует сырой вывод модели в унифицированный формат `Detection`: кортеж `((x1, y1, x2, y2), class_name, confidence)`. Поддерживает CUDA с автоматическим fallback на CPU.
 
-## Key Concepts
+### tracker — `src/tracker.py`
 
-### Real-time Processing
-The system must maintain stable FPS (target: 20–30 FPS).
+Реализует centroid-трекер: сопоставляет детекции между кадрами по евклидовому расстоянию между центроидами. Назначает каждому объекту уникальный `track_id`, сохраняет его на протяжении всего нахождения объекта в кадре. Автоматически удаляет треки, пропавшие на `max_disappeared` кадров.
 
----
+### counter — `src/counter.py`
 
-### Latency Awareness
-Each frame must be processed quickly to avoid delays.
+Подсчитывает уникальные объекты: каждый `track_id` учитывается ровно один раз. Опционально проверяет, находится ли центроид объекта внутри заданной полигональной зоны подсчёта (ray casting). Хранит счётчики по классам и суммарный счётчик.
 
----
+### renderer — `src/renderer.py`
 
-### Tracking Consistency
-Objects must retain consistent IDs across frames.
+Отрисовывает аннотации поверх кадра средствами OpenCV: рамки детекций с уверенностью, рамки треков с ID, панель счётчиков, индикатор FPS. Цвета треков детерминированы по `track_id % 256` — один объект всегда одного цвета в течение всей сессии.
 
----
+### metrics — `src/metrics.py`
 
-### Event Detection
-Counting is based on detecting line crossing events.
+Измеряет производительность pipeline: FPS (скользящее окно 30 кадров), среднее время инференса детектора и трекера в миллисекундах. Не влияет на логику обработки — только мониторинг.
 
 ---
 
-## Constraints
+## Вспомогательные компоненты
 
-- Runs locally on a laptop (RTX 3050 Ti GPU)
-- Limited VRAM (~4GB)
-- Must avoid high memory usage
-- Must maintain real-time performance
+- **`src/config.py`** — загрузка YAML-конфигурации с поддержкой dot-notation (`video.frame_width`).
+- **`src/utils.py`** — геометрические утилиты: центроид bbox, евклидово расстояние, IoU, проверка точки в полигоне.
 
 ---
 
-## Development Guidelines (for AI Agents)
+## Технологический стек
 
-When modifying or generating code:
-
-1. Preserve modular structure:
-   - do not merge components into a single file
-
-2. Avoid blocking operations:
-   - keep pipeline responsive
-
-3. Optimize for performance:
-   - avoid unnecessary copies of frames
-   - minimize CPU-GPU transfers
-
-4. Keep code simple and readable:
-   - prefer clarity over premature optimization
-
-5. Use structured outputs:
-   - detections should be consistent (dict or dataclass)
+| Компонент | Технология |
+|-----------|-----------|
+| Детекция | YOLOv8 (Ultralytics) |
+| Инференс | PyTorch + CUDA |
+| Захват видео | OpenCV |
+| Трекинг | Centroid Tracker (собственная реализация) |
+| Конфигурация | YAML |
+| Язык | Python 3.10+ |
 
 ---
 
-## Non-Goals
+## Архитектурные замечания
 
-- High-accuracy detection is NOT the priority
-- Training models from scratch is NOT required
-- Cloud deployment is NOT required
+**Известные проблемы:**
+- Centroid-трекер не справляется с окклюзиями — при пересечении объектов возможна смена ID.
+- `calculate_iou` в `utils.py` реализован, но нигде не используется.
+- Конфиг поддерживает `tracker.algorithm: "kalman"`, но Kalman-фильтр не реализован.
+- Синхронный pipeline: детектор блокирует основной поток на время инференса.
+- Параметр `output.save_video` предусмотрен в конфиге, но не подключён к pipeline.
 
----
-
-## Future Goals
-
-- Export model to ONNX
-- Optimize inference (TensorRT)
-- Add async processing
-- Integrate with drone simulation (PX4 / AirSim)
-
----
-
-## Example Use Case
-
-A camera observes a street:
-
-- detects cars and people
-- tracks each object
-- counts how many cross a virtual line
-
----
-
-## Expected Output
-
-- Video with bounding boxes
-- Object IDs
-- Counter (IN / OUT)
-- FPS and latency displayed on screen
+**Вектор развития (из исходного проекта):**
+- Экспорт модели в ONNX / TensorRT для оптимизации инференса
+- Асинхронный захват кадров
+- Интеграция с симулятором дрона (PX4 / AirSim)
+- Замена centroid-трекера на ByteTrack или BoT-SORT
