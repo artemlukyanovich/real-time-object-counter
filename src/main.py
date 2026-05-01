@@ -1,9 +1,10 @@
-"""Main application module."""
+"""Main application entry point for the real-time object counter."""
+
+import argparse
+import time
+from typing import Optional, Union
 
 import cv2
-import time
-import argparse
-from pathlib import Path
 
 from src.config import Config
 from src.video_source import VideoSource
@@ -15,161 +16,163 @@ from src.renderer import FrameRenderer
 
 
 class ObjectCounterApp:
-    """Main application for real-time object counting."""
+    """Real-time object detection, tracking, and counting application."""
 
-    def __init__(self, config_path: str = "configs/default.yaml"):
-        """Initialize application.
-
-        Args:
-            config_path: Path to configuration file
-        """
+    def __init__(
+        self,
+        config_path: str = "configs/default.yaml",
+        source_override: Optional[Union[str, int]] = None,
+    ) -> None:
         self.config = Config(config_path)
+        self.source_override = source_override
+
         self.video_source = None
         self.detector = None
         self.tracker = None
         self.counter = None
         self.metrics = None
         self.renderer = None
-        self.video_writer = None
 
         self._initialize_components()
 
     def _initialize_components(self) -> None:
-        """Initialize all application components."""
-        # Video source
-        source = self.config.get('video.source', 0)
-        width = self.config.get('video.frame_width', 1280)
-        height = self.config.get('video.frame_height', 720)
+        source = self.source_override
+        if source is None:
+            source = self.config.get("video.source", 0)
+
+        width = self.config.get("video.frame_width", 1280)
+        height = self.config.get("video.frame_height", 720)
         self.video_source = VideoSource(source, width, height)
 
-        # Detector
-        model = self.config.get('detector.model', 'yolov8n')
-        conf = self.config.get('detector.confidence_threshold', 0.5)
-        device = self.config.get('detector.device', 'cuda')
-        self.detector = ObjectDetector(model, conf, device)
+        model = self.config.get("detector.model", "yolov8n.pt")
+        confidence = self.config.get("detector.confidence_threshold", 0.5)
+        device = self.config.get("detector.device", "cuda")
+        self.detector = ObjectDetector(model, confidence, device)
 
-        # Tracker
-        max_disappeared = self.config.get('tracker.max_disappeared', 50)
-        max_distance = self.config.get('tracker.max_distance', 50)
+        max_disappeared = self.config.get("tracker.max_disappeared", 50)
+        max_distance = self.config.get("tracker.max_distance", 50)
         self.tracker = CentroidTracker(max_disappeared, max_distance)
 
-        # Counter
         self.counter = ObjectCounter()
-
-        # Metrics
         self.metrics = PerformanceMetrics()
 
-        # Renderer
-        font_size = self.config.get('display.font_size', 1.0)
+        font_size = self.config.get("display.font_size", 1.0)
         self.renderer = FrameRenderer(font_size)
 
     def run(self) -> None:
-        """Run the application."""
-        print("Starting object counter...")
+        print("Starting object counter. Press 'q' to exit.")
+        print(f"Device: {self.config.get('detector.device', 'Not specified')}")
 
         try:
             while True:
-                frame_start = time.time()
+                frame_start = time.perf_counter()
 
-                # Read frame
-                ret, frame = self.video_source.read()
-                if not ret:
-                    print("End of video or camera disconnected")
+                success, frame = self.video_source.read()
+                if not success:
+                    print("End of video stream or camera disconnected.")
                     break
 
-                # Detection
-                detect_start = time.time()
+                detect_start = time.perf_counter()
                 detections = self.detector.detect(frame)
-                detect_time = time.time() - detect_start
-                self.metrics.record_detection_time(detect_time)
+                self.metrics.record_detection_time(
+                    time.perf_counter() - detect_start
+                )
 
-                # Tracking
-                track_start = time.time()
+                track_start = time.perf_counter()
                 tracked_objects = self.tracker.update(detections)
-                track_time = time.time() - track_start
-                self.metrics.record_tracking_time(track_time)
+                self.metrics.record_tracking_time(
+                    time.perf_counter() - track_start
+                )
 
-                # Counting
                 counts = self.counter.update(tracked_objects)
 
-                # Rendering
-                if self.config.get('display.show_detections', True):
-                    frame = self.renderer.render_detections(frame, detections)
+                frame = self._render_frame(frame, detections, tracked_objects, counts)
 
-                if self.config.get('display.show_tracking_ids', True):
-                    frame = self.renderer.render_tracks(frame, tracked_objects)
+                self.metrics.record_frame_time(time.perf_counter() - frame_start)
 
-                if self.config.get('display.show_counts', True):
-                    frame = self.renderer.render_counts(frame, counts,
-                                                       self.counter.get_total_count())
-
-                fps = self.metrics.get_fps()
-                frame = self.renderer.render_fps(frame, fps)
-
-                # Display
                 cv2.imshow("Object Counter", frame)
 
-                # Record metrics
-                frame_time = time.time() - frame_start
-                self.metrics.record_frame_time(frame_time)
-
-                # Check for exit
-                if cv2.waitKey(1) & 0xFF == ord('q'):
+                if cv2.waitKey(1) & 0xFF == ord("q"):
                     break
 
         finally:
             self.cleanup()
 
+    def _render_frame(self, frame, detections, tracked_objects, counts):
+        if self.config.get("display.show_detections", True):
+            frame = self.renderer.render_detections(frame, detections)
+
+        if self.config.get("display.show_tracking_ids", True):
+            frame = self.renderer.render_tracks(frame, tracked_objects)
+
+        if self.config.get("display.show_counts", True):
+            frame = self.renderer.render_counts(
+                frame,
+                counts,
+                self.counter.get_total_count(),
+            )
+
+        fps = self.metrics.get_fps()
+        frame = self.renderer.render_fps(frame, fps)
+
+        return frame
+
     def cleanup(self) -> None:
-        """Clean up resources."""
         if self.video_source:
             self.video_source.release()
-        if self.video_writer:
-            self.video_writer.release()
+
         cv2.destroyAllWindows()
 
-        # Print final metrics
-        metrics_summary = self.metrics.get_summary()
-        print("\nFinal Metrics:")
-        for key, value in metrics_summary.items():
-            print(f"  {key}: {value:.2f}")
+        if self.metrics:
+            print("\nFinal Metrics:")
+            for key, value in self.metrics.get_summary().items():
+                print(f"  {key}: {value:.2f}")
 
-        print(f"\nFinal Counts:")
-        for class_name, count in self.counter.get_counts().items():
-            print(f"  {class_name}: {count}")
-        print(f"  Total: {self.counter.get_total_count()}")
-
-    def __enter__(self):
-        """Context manager entry."""
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit."""
-        self.cleanup()
+        if self.counter:
+            print("\nFinal Counts:")
+            for class_name, count in self.counter.get_counts().items():
+                print(f"  {class_name}: {count}")
+            print(f"  Total: {self.counter.get_total_count()}")
 
 
-def main():
-    """Main entry point."""
+def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Real-time Object Counter")
-    parser.add_argument("--config", type=str, default="configs/default.yaml",
-                       help="Path to configuration file")
-    parser.add_argument("--video", type=str, default=None,
-                       help="Path to video file (overrides config)")
-    parser.add_argument("--webcam", action="store_true",
-                       help="Use webcam instead of video file")
 
-    args = parser.parse_args()
+    parser.add_argument(
+        "--config",
+        type=str,
+        default="configs/default.yaml",
+        help="Path to configuration file",
+    )
 
-    app = ObjectCounterApp(args.config)
+    parser.add_argument(
+        "--source",
+        type=str,
+        default=None,
+        help="Video source: webcam index or path to video file",
+    )
 
-    # Override video source if specified
-    if args.webcam:
-        app.config.config['video']['source'] = 0
-        app._initialize_components()
-    elif args.video:
-        app.config.config['video']['source'] = args.video
-        app._initialize_components()
+    return parser.parse_args()
 
+
+def normalize_source(source: Optional[str]):
+    if source is None:
+        return None
+
+    if source.isdigit():
+        return int(source)
+
+    return source
+
+
+def main() -> None:
+    args = parse_args()
+    source = normalize_source(args.source)
+
+    app = ObjectCounterApp(
+        config_path=args.config,
+        source_override=source,
+    )
     app.run()
 
 

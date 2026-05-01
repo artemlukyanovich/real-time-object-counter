@@ -57,7 +57,8 @@ class CentroidTracker:
             min_dist = distances[min_dist_idx]
 
             if min_dist < self.max_distance and min_dist_idx not in used_detections:
-                matched_objects[track_id] = detections[min_dist_idx]
+                bbox, class_name, _ = detections[min_dist_idx]
+                matched_objects[track_id] = (bbox, class_name)
                 used_detections.add(min_dist_idx)
                 self.disappeared[track_id] = 0
                 self.objects[track_id] = tuple(centroids[min_dist_idx])

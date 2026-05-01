@@ -5,7 +5,7 @@ video:
   frame_height: 720
 
 detector:
-  model: "yolov8n"  # nano model for speed
+  model: "yolov8n.pt"  # nano model for speed
   confidence_threshold: 0.5
   device: "cuda"  # or "cpu"
 
