@@ -17,7 +17,7 @@ Python, PyTorch, OpenCV, YOLO, ByteTrack.
 GIF/video/screenshot
 
 ## How to run
-conda activate ml_universal
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
 pip install -r requirements.txt
 python src/main.py --source 0
 

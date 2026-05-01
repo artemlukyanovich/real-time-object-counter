@@ -1,0 +1,31 @@
+video:
+  source: 0  # Webcam by default (0=default camera, or path to video file)
+  fps: 30
+  frame_width: 1280
+  frame_height: 720
+
+detector:
+  model: "yolov8n"  # nano model for speed
+  confidence_threshold: 0.5
+  device: "cuda"  # or "cpu"
+
+tracker:
+  algorithm: "centroid"  # or "kalman"
+  max_disappeared: 50
+  max_distance: 50
+
+counter:
+  enable: true
+  count_zone: null  # Optional: define counting zone
+
+output:
+  save_video: false
+  output_dir: "outputs"
+  video_name: "output.mp4"
+  fps: 30
+
+display:
+  show_detections: true
+  show_tracking_ids: true
+  show_counts: true
+  font_size: 1.0
