@@ -10,7 +10,7 @@ detector:
   device: "cuda"  # or "cpu"
 
 tracker:
-  algorithm: "centroid"  # or "kalman"
+  algorithm: "centroid"  # "centroid" or "kalman"
 
   # If null, calculated from FPS:
   # video.fps * auto_max_disappeared_seconds
@@ -22,7 +22,7 @@ tracker:
   # If null, calculated from FPS:
   # auto_max_distance_base * auto_max_distance_reference_fps / video.fps
   max_distance: null
-  auto_max_distance_base: 500
+  auto_max_distance_base: 1000
   auto_max_distance_reference_fps: 30
   auto_max_distance_cap: 200
 
