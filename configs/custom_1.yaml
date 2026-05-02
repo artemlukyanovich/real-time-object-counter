@@ -28,7 +28,11 @@ tracker:
 
 counter:
   enable: true
-  count_zone: null  # Optional: define counting zone
+  count_zone: null  # Optional: polygon zone [[x1,y1],[x2,y2],...]
+  crossing_lines: null  # Optional: see default.yaml for format
+#  crossing_lines:
+#    - name: "Centre"
+#      points: [ [ 640, 0 ], [ 640, 720 ] ]
 
 output:
   save_video: false

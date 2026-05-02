@@ -61,7 +61,8 @@ class ObjectCounterApp:
             f"max_distance={max_distance:.2f}"
         )
 
-        self.counter = ObjectCounter()
+        crossing_lines = self.config.get("counter.crossing_lines", None)
+        self.counter = ObjectCounter(crossing_lines=crossing_lines)
         self.metrics = PerformanceMetrics()
 
         font_size = self.config.get("display.font_size", 1.0)
@@ -163,11 +164,28 @@ class ObjectCounterApp:
         if self.config.get("display.show_tracking_ids", True):
             frame = self.renderer.render_tracks(frame, tracked_objects)
 
-        if self.config.get("display.show_counts", True):
+        show_counts = self.config.get("display.show_counts", True)
+
+        if self.counter.has_crossing_lines():
+            frame = self.renderer.render_crossing_lines(
+                frame, self.counter.get_crossing_line_defs()
+            )
+
+        zone_panel_height = 0
+        if show_counts and counts:
             frame = self.renderer.render_counts(
                 frame,
                 counts,
                 self.counter.get_total_count(),
+            )
+            zone_panel_height = 70 + len(counts) * 28
+
+        if self.counter.has_crossing_lines() and show_counts:
+            y_start = zone_panel_height + 20 if zone_panel_height else 10
+            frame = self.renderer.render_line_counts(
+                frame,
+                self.counter.get_line_counts(),
+                y_start=y_start,
             )
 
         fps = self.metrics.get_fps()
@@ -191,6 +209,17 @@ class ObjectCounterApp:
             for class_name, count in self.counter.get_counts().items():
                 print(f"  {class_name}: {count}")
             print(f"  Total: {self.counter.get_total_count()}")
+
+            if self.counter.has_crossing_lines():
+                print("\nLine Crossing Counts:")
+                for line_name, dirs in self.counter.get_line_counts().items():
+                    in_total = sum(dirs["in"].values())
+                    out_total = sum(dirs["out"].values())
+                    print(f"  [{line_name}]  in={in_total}  out={out_total}")
+                    for class_name, count in dirs["in"].items():
+                        print(f"    in  {class_name}: {count}")
+                    for class_name, count in dirs["out"].items():
+                        print(f"    out {class_name}: {count}")
 
 
 def parse_args() -> argparse.Namespace:

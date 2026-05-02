@@ -28,7 +28,17 @@ tracker:
 
 counter:
   enable: true
-  count_zone: null  # Optional: define counting zone
+  count_zone: null  # Optional: polygon zone [[x1,y1],[x2,y2],...]
+
+  # Optional: list of lines that trigger IN/OUT counts when an object crosses them.
+  # "in"  = object moved from the LEFT side of the line to the RIGHT side
+  #         (left/right defined by the direction from points[0] to points[1]).
+  # "out" = opposite direction.
+  # Example (vertical centre line on a 1280×720 frame):
+  #   crossing_lines:
+  #     - name: "Centre"
+  #       points: [[640, 0], [640, 720]]
+  crossing_lines: null
 
 output:
   save_video: false

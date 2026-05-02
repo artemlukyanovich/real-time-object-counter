@@ -144,6 +144,126 @@ class FrameRenderer:
 
         return frame
 
+    def render_crossing_lines(
+        self,
+        frame: np.ndarray,
+        crossing_lines: List[Dict],
+    ) -> np.ndarray:
+        """Draw crossing lines and their name labels on the frame.
+
+        Args:
+            frame: Input frame.
+            crossing_lines: List of line defs, each {"name": str, "points": [[x1,y1],[x2,y2]]}.
+
+        Returns:
+            Frame with crossing lines drawn.
+        """
+        frame = frame.copy()
+        line_color = (0, 220, 220)  # Cyan-ish
+
+        for line_def in crossing_lines:
+            name = line_def["name"]
+            p1 = tuple(line_def["points"][0])
+            p2 = tuple(line_def["points"][1])
+
+            cv2.line(frame, p1, p2, line_color, 2, cv2.LINE_AA)
+
+            # Label near the midpoint, offset slightly so it doesn't sit on the line.
+            mid_x = (p1[0] + p2[0]) // 2
+            mid_y = (p1[1] + p2[1]) // 2
+            cv2.putText(
+                frame,
+                name,
+                (mid_x + 8, mid_y - 8),
+                self.font,
+                self.font_size,
+                line_color,
+                1,
+                cv2.LINE_AA,
+            )
+
+        return frame
+
+    def render_line_counts(
+        self,
+        frame: np.ndarray,
+        line_counts: Dict,
+        y_start: int = 10,
+    ) -> np.ndarray:
+        """Render a panel showing line-crossing counts.
+
+        Args:
+            frame: Input frame.
+            line_counts: {line_name: {"in": {class: n}, "out": {class: n}}}.
+            y_start: Top y-coordinate of the panel (allows stacking below zone count panel).
+
+        Returns:
+            Frame with count panel rendered.
+        """
+        if not line_counts:
+            return frame
+
+        frame = frame.copy()
+        line_color = (0, 220, 220)
+
+        # Compute how many text rows we need.
+        row_count = 0
+        for name, dirs in line_counts.items():
+            row_count += 1  # line name header
+            for direction in ("in", "out"):
+                row_count += 1  # direction total
+                row_count += len(dirs[direction])  # per-class breakdown
+
+        row_h = 24
+        panel_h = 12 + row_count * row_h + 8
+        panel_x2 = 320
+
+        overlay = frame.copy()
+        cv2.rectangle(
+            overlay, (10, y_start), (panel_x2, y_start + panel_h),
+            self.panel_bg_color, -1,
+        )
+        frame = cv2.addWeighted(overlay, 0.55, frame, 0.45, 0)
+
+        y = y_start + row_h
+
+        for name, dirs in line_counts.items():
+            cv2.putText(
+                frame, f"[{name}]", (20, y),
+                self.font, self.font_size, line_color, 1, cv2.LINE_AA,
+            )
+            y += row_h
+
+            for direction, arrow in (("in", "\u2193"), ("out", "\u2191")):
+                class_counts = dirs[direction]
+                total = sum(class_counts.values())
+                cv2.putText(
+                    frame,
+                    f"  {arrow} {direction}: {total}",
+                    (20, y),
+                    self.font,
+                    self.font_size,
+                    self.text_color,
+                    1,
+                    cv2.LINE_AA,
+                )
+                y += row_h
+
+                for class_name, count in class_counts.items():
+                    cv2.putText(
+                        frame,
+                        f"      {class_name}: {count}",
+                        (20, y),
+                        self.font,
+                        self.font_size * 0.85,
+                        self.text_color,
+                        1,
+                        cv2.LINE_AA,
+                    )
+                    y += row_h
+
+        return frame
+
     def render_fps(self, frame: np.ndarray, fps: float) -> np.ndarray:
         """Render FPS metric on frame.
 

@@ -41,6 +41,22 @@ def distance(point1: Tuple[int, int],
     return np.sqrt((point1[0] - point2[0]) ** 2 + (point1[1] - point2[1]) ** 2)
 
 
+def point_side_of_line(
+    point: Tuple[int, int],
+    line_start: Tuple[int, int],
+    line_end: Tuple[int, int],
+) -> float:
+    """Return the signed area of the cross product for a point relative to a directed line.
+
+    Positive means the point is on the left side of the line (from line_start to line_end),
+    negative means right side, zero means the point is on the line.
+    """
+    px, py = point
+    x1, y1 = line_start
+    x2, y2 = line_end
+    return float((x2 - x1) * (py - y1) - (y2 - y1) * (px - x1))
+
+
 def is_point_in_polygon(point: Tuple[int, int],
                         polygon: List[Tuple[int, int]]) -> bool:
     """Check if point is inside polygon using ray casting algorithm."""
