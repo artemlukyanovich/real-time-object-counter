@@ -12,7 +12,7 @@ from ultralytics import YOLO
 # ((x1, y1, x2, y2), class_name, confidence)
 Detection = Tuple[Tuple[int, int, int, int], str, float]
 
-_TRACKERS_DIR = Path(__file__).parent.parent / "configs" / "trackers"
+_TRACKERS_DIR = Path(__file__).parent.parent / ".runtime" / "trackers"
 
 
 class ByteTracker:

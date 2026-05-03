@@ -41,6 +41,7 @@ data/input/
 outputs/
 *.log
 .cache/
+.runtime/
 models/
 *.mp4
 *.avi
