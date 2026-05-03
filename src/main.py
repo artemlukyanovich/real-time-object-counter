@@ -93,13 +93,22 @@ class ObjectCounterApp:
         return max(1, round(fps * float(seconds)))
 
     def _get_configured_fps(self) -> float:
-        """Get FPS value used for FPS-dependent tracker settings."""
-        fps = self.config.get("video.fps", 30)
+        """Resolve FPS for tracker initialisation.
 
-        if fps is None or fps <= 0:
-            return 30.0
+        Priority:
+        1. Explicit ``video.fps`` in config.
+        2. FPS reported by the video source (file metadata or webcam driver).
+        3. Fallback: 30 fps.
+        """
+        explicit = self.config.get_raw("video.fps")
+        if explicit is not None:
+            return float(explicit)
 
-        return float(fps)
+        source_fps = self.video_source.get_fps()
+        if source_fps and source_fps > 0:
+            return float(source_fps)
+
+        return float(self.config.get("video.fallback_fps", 30))
 
     def run(self) -> None:
         print("Starting object counter. Press 'q' to exit.")

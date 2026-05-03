@@ -1,12 +1,13 @@
 video:
   source: 0  # Webcam by default (0=default camera, or path to video file)
-  fps: 30
+  fps: null         # null = read from source; explicit value overrides it
+  fallback_fps: 30  # used when fps is null and the source reports 0 or nothing
   frame_width: 1280
   frame_height: 720
 
 detector:
-  model: "yolov8n.pt"  # nano model for speed
-#  model: "yolov8s.pt"  # компромисс: скорость/точность
+#  model: "yolov8n.pt"  # nano model for speed
+  model: "yolov8s.pt"  # компромисс: скорость/точность
   confidence_threshold: 0.5
   device: "cuda"  # or "cpu"
 
