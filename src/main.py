@@ -58,6 +58,8 @@ class ObjectCounterApp:
             "tracker.minimum_matching_threshold", 0.8
         )
         self.tracker = ByteTracker(
+            model=self.detector.model,
+            conf_threshold=confidence,
             frame_rate=int(fps),
             track_activation_threshold=track_activation_threshold,
             lost_track_buffer=lost_track_buffer,
@@ -65,7 +67,7 @@ class ObjectCounterApp:
         )
 
         print(
-            "Tracker: ByteTrack | "
+            "Tracker: ByteTrack (Ultralytics) | "
             f"fps={fps:.0f}, "
             f"activation_threshold={track_activation_threshold}, "
             f"lost_track_buffer={lost_track_buffer}, "
@@ -124,16 +126,10 @@ class ObjectCounterApp:
                     break
 
                 detect_start = time.perf_counter()
-                detections = self.detector.detect(frame)
-                self.metrics.record_detection_time(
-                    time.perf_counter() - detect_start
-                )
-
-                track_start = time.perf_counter()
-                tracked_objects = self.tracker.update(detections)
-                self.metrics.record_tracking_time(
-                    time.perf_counter() - track_start
-                )
+                detections, tracked_objects = self.tracker.update(frame)
+                elapsed = time.perf_counter() - detect_start
+                self.metrics.record_detection_time(elapsed)
+                self.metrics.record_tracking_time(0.0)
 
                 counts = self.counter.update(tracked_objects)
 

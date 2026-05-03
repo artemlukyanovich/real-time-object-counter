@@ -1,23 +1,36 @@
-"""Object tracking module using ByteTrack (via the supervision library)."""
+"""Object tracking module using Ultralytics built-in ByteTrack."""
 
-import numpy as np
-import supervision as sv
+from pathlib import Path
 from typing import Dict, List, Tuple
 
+import numpy as np
+import yaml
+from ultralytics import YOLO
 
-# Re-export the Detection type alias used by detector.py so imports stay consistent.
+
+# Detection format shared across the project:
+# ((x1, y1, x2, y2), class_name, confidence)
 Detection = Tuple[Tuple[int, int, int, int], str, float]
+
+_TRACKERS_DIR = Path(__file__).parent.parent / "configs" / "trackers"
 
 
 class ByteTracker:
-    """Wrap supervision's ByteTracker to match the project's tracker interface.
+    """Ultralytics ByteTrack wrapper.
 
-    Input:  List[((x1, y1, x2, y2), class_name, confidence)]
-    Output: Dict[track_id, ((x1, y1, x2, y2), class_name)]
+    Uses model.track() (the official Ultralytics tracking API) so that
+    detection and tracking run in a single inference pass.
+
+    update() input:  BGR frame (numpy array)
+    update() output: (detections, tracked_objects)
+        detections:      List[((x1,y1,x2,y2), class_name, confidence)]
+        tracked_objects: Dict[track_id, ((x1,y1,x2,y2), class_name)]
     """
 
     def __init__(
         self,
+        model: YOLO,
+        conf_threshold: float = 0.5,
         frame_rate: int = 30,
         track_activation_threshold: float = 0.25,
         lost_track_buffer: int = 30,
@@ -26,89 +39,99 @@ class ByteTracker:
         """Initialise ByteTracker.
 
         Args:
-            frame_rate: Video frame rate — used to convert the lost_track_buffer
-                (in frames) into a time window for track re-identification.
-            track_activation_threshold: Minimum detection confidence required to
-                activate a new track.
-            lost_track_buffer: Number of frames to keep a lost track alive before
-                discarding it.
-            minimum_matching_threshold: IoU threshold for matching detections to
-                existing tracks.
+            model: Loaded Ultralytics YOLO model (shared with the detector).
+            conf_threshold: Detection confidence threshold passed to model.track().
+            frame_rate: FPS hint (stored for informational use).
+            track_activation_threshold: Maps to track_high_thresh and
+                new_track_thresh in the ByteTrack YAML.
+            lost_track_buffer: Maps to track_buffer (frames to keep a lost
+                track alive before discarding it).
+            minimum_matching_threshold: Maps to match_thresh (IoU threshold
+                for associating detections to tracks).
         """
-        self._tracker = sv.ByteTrack(
+        self._model = model
+        self._conf = conf_threshold
+        self._yaml_path = self._write_tracker_yaml(
             track_activation_threshold=track_activation_threshold,
             lost_track_buffer=lost_track_buffer,
             minimum_matching_threshold=minimum_matching_threshold,
-            frame_rate=frame_rate,
         )
 
-        # Bidirectional mapping between string class names and integer IDs
-        # required by supervision's Detections.
-        self._name_to_id: Dict[str, int] = {}
-        self._id_to_name: Dict[int, str] = {}
-        self._next_class_id: int = 0
-
-    # ------------------------------------------------------------------
-    # Public interface (matches the old CentroidTracker signature)
-    # ------------------------------------------------------------------
+    # ── public interface ─────────────────────────────────────────────
 
     def update(
         self,
-        detections: List[Detection],
-    ) -> Dict[int, Tuple[Tuple[int, int, int, int], str]]:
-        """Update tracker with detections from the current frame.
+        frame: np.ndarray,
+    ) -> Tuple[List[Detection], Dict[int, Tuple[Tuple[int, int, int, int], str]]]:
+        """Run detection + tracking on a single frame.
 
         Args:
-            detections: List of (bbox, class_name, confidence).
+            frame: Current BGR frame.
 
         Returns:
-            Dictionary of {track_id: (bbox, class_name)} for all active tracks.
+            Tuple of:
+            - detections: all detected boxes (used for rendering raw bboxes).
+            - tracked_objects: {track_id: (bbox, class_name)} for confirmed tracks.
         """
-        sv_detections = self._to_sv_detections(detections)
-        tracked = self._tracker.update_with_detections(sv_detections)
+        results = self._model.track(
+            frame,
+            persist=True,
+            tracker=self._yaml_path,
+            conf=self._conf,
+            verbose=False,
+        )
 
-        if tracked.tracker_id is None or len(tracked) == 0:
-            return {}
+        detections: List[Detection] = []
+        tracked_objects: Dict[int, Tuple[Tuple[int, int, int, int], str]] = {}
 
-        result: Dict[int, Tuple[Tuple[int, int, int, int], str]] = {}
-        for i, track_id in enumerate(tracked.tracker_id):
-            x1, y1, x2, y2 = (int(v) for v in tracked.xyxy[i])
-            class_name = self._id_to_name.get(int(tracked.class_id[i]), "unknown")
-            result[int(track_id)] = ((x1, y1, x2, y2), class_name)
+        for result in results:
+            if result.boxes is None:
+                continue
+            boxes = result.boxes
+            for i in range(len(boxes)):
+                x1, y1, x2, y2 = boxes.xyxy[i].int().tolist()
+                conf = float(boxes.conf[i])
+                class_name = result.names[int(boxes.cls[i])]
+                detections.append(((x1, y1, x2, y2), class_name, conf))
 
-        return result
+                if boxes.id is not None:
+                    track_id = int(boxes.id[i])
+                    tracked_objects[track_id] = ((x1, y1, x2, y2), class_name)
+
+        return detections, tracked_objects
 
     def reset(self) -> None:
-        """Reset tracker state."""
-        self._tracker.reset()
+        """Reset tracker state (clears all active tracks)."""
+        if hasattr(self._model, "predictor") and self._model.predictor is not None:
+            self._model.predictor.trackers = {}
 
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
+    # ── internal ─────────────────────────────────────────────────────
 
-    def _get_class_id(self, class_name: str) -> int:
-        if class_name not in self._name_to_id:
-            self._name_to_id[class_name] = self._next_class_id
-            self._id_to_name[self._next_class_id] = class_name
-            self._next_class_id += 1
-        return self._name_to_id[class_name]
+    def _write_tracker_yaml(
+        self,
+        track_activation_threshold: float,
+        lost_track_buffer: int,
+        minimum_matching_threshold: float,
+    ) -> str:
+        """Write the ByteTrack YAML and return its path.
 
-    def _to_sv_detections(self, detections: List[Detection]) -> sv.Detections:
-        if not detections:
-            return sv.Detections(
-                xyxy=np.empty((0, 4), dtype=np.float32),
-                confidence=np.empty(0, dtype=np.float32),
-                class_id=np.empty(0, dtype=np.int_),
-            )
+        Parameter mapping:
+            track_activation_threshold → track_high_thresh, new_track_thresh
+            lost_track_buffer          → track_buffer
+            minimum_matching_threshold → match_thresh
+        """
+        _TRACKERS_DIR.mkdir(parents=True, exist_ok=True)
+        yaml_path = _TRACKERS_DIR / "bytetrack.yaml"
 
-        xyxy = np.array(
-            [[b[0], b[1], b[2], b[3]] for b, _, _ in detections],
-            dtype=np.float32,
-        )
-        confidences = np.array([c for _, _, c in detections], dtype=np.float32)
-        class_ids = np.array(
-            [self._get_class_id(cn) for _, cn, _ in detections],
-            dtype=np.int_,
-        )
+        params = {
+            "tracker_type": "bytetrack",
+            "track_high_thresh": track_activation_threshold,
+            "track_low_thresh": 0.1,
+            "new_track_thresh": track_activation_threshold,
+            "track_buffer": lost_track_buffer,
+            "match_thresh": minimum_matching_threshold,
+        }
+        with open(yaml_path, "w") as fh:
+            yaml.dump(params, fh, default_flow_style=False)
 
-        return sv.Detections(xyxy=xyxy, confidence=confidences, class_id=class_ids)
+        return str(yaml_path)
