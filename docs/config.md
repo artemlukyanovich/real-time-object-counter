@@ -11,7 +11,8 @@
 ```yaml
 video:
   source: 0
-  fps: 30
+  fps: null
+  fallback_fps: 30
   frame_width: 1280
   frame_height: 720
 
@@ -21,13 +22,16 @@ detector:
   device: "cuda"
 
 tracker:
-  algorithm: "centroid"
-  max_disappeared: 50
-  max_distance: 50
+  algorithm: "bytetrack"
+  track_activation_threshold: 0.25
+  lost_track_buffer: null
+  auto_lost_track_buffer_seconds: 3.0
+  minimum_matching_threshold: 0.8
 
 counter:
   enable: true
   count_zone: null
+  crossing_lines: null
 
 output:
   save_video: false
@@ -49,7 +53,8 @@ display:
 | Параметр | Тип | По умолчанию | Описание |
 |----------|-----|-------------|----------|
 | `source` | int / str | `0` | Источник: `0` — первая камера, `1` — вторая, путь к файлу — видео |
-| `fps` | int | `30` | Целевой FPS (только метаданные; фактический определяется железом) |
+| `fps` | int / null | `null` | `null` — читать FPS из источника; явное значение переопределяет его |
+| `fallback_fps` | int | `30` | FPS по умолчанию, если источник сообщает `0` или ничего |
 | `frame_width` | int | `1280` | Ширина кадра после ресайза (пиксели) |
 | `frame_height` | int | `720` | Высота кадра после ресайза (пиксели) |
 
@@ -88,22 +93,81 @@ display:
 
 ## Секция `tracker`
 
+Секция содержит два уровня настроек:
+
+1. **Общие параметры** в `default.yaml` — задают алгоритм и три ключевых значения, одинаковых для ByteTrack и BoT-SORT.
+2. **Шаблоны алгоритмов** в `configs/trackers/bytetrack.yaml` и `configs/trackers/botsort.yaml` — содержат полный набор параметров конкретного алгоритма. Общие параметры из п.1 перезаписывают соответствующие поля шаблона при запуске.
+
+### Общие параметры (`default.yaml`)
+
 | Параметр | Тип | По умолчанию | Описание |
 |----------|-----|-------------|----------|
-| `algorithm` | str | `"centroid"` | Алгоритм трекинга (только `"centroid"` реализован) |
-| `max_disappeared` | int | `50` | Кадров без детекции до удаления трека |
-| `max_distance` | int | `50` | Максимальное расстояние (пиксели) для сопоставления центроидов |
+| `algorithm` | str | `"bytetrack"` | Алгоритм трекинга: `"bytetrack"` или `"botsort"` |
+| `track_activation_threshold` | float | `0.25` | Минимальная уверенность для активации нового трека |
+| `lost_track_buffer` | int / null | `null` | Кадров до удаления потерянного трека; `null` = авторасчёт |
+| `auto_lost_track_buffer_seconds` | float | `3.0` | Секунды для авторасчёта буфера: `round(fps × seconds)` |
+| `minimum_matching_threshold` | float | `0.8` | Порог IoU для сопоставления детекций с треками |
 
-**Влияние `max_disappeared`:**
-- Малое значение (10–20): треки удаляются быстро при кратких окклюзиях → частая смена ID → неточный подсчёт
-- Большое значение (50–100): треки сохраняются при длительных окклюзиях → стабильный ID
+**Маппинг на поля шаблонов:**
 
-**Влияние `max_distance`:**
-- Зависит от скорости объектов и FPS: объект при 30 FPS и скорости 300 px/s смещается ~10 px/кадр → `max_distance=30` достаточно
-- Слишком большое значение → неверное сопоставление разных объектов при высокой плотности
-- Слишком малое → потеря треков при быстром движении
+| Параметр `default.yaml` | Поле в шаблоне трекера |
+|-------------------------|------------------------|
+| `track_activation_threshold` | `track_high_thresh`, `new_track_thresh` |
+| `lost_track_buffer` | `track_buffer` |
+| `minimum_matching_threshold` | `match_thresh` |
 
-**Формула подбора:** `max_distance = (max_speed_px_per_sec / fps) * 2`
+**Влияние `track_activation_threshold`:**
+- Малое значение (0.1–0.2): новые треки создаются даже при слабой уверенности → больше ложных треков
+- Большое значение (0.5+): только уверенные детекции активируют трек → пропуски при частичном перекрытии
+
+**Влияние `lost_track_buffer`:**
+- Малое значение (10–20 кадров): треки удаляются быстро при кратких окклюзиях → частая смена ID → неточный подсчёт
+- Большое значение (50–100 кадров): треки сохраняются при длительных окклюзиях → стабильный ID
+- При `null` буфер рассчитывается автоматически: `round(fps × auto_lost_track_buffer_seconds)`
+
+**Влияние `minimum_matching_threshold`:**
+- Высокое значение (0.8+): требуется сильное пересечение bbox → меньше ложных сопоставлений, больше разрывов треков при быстром движении
+- Низкое значение (0.4–0.5): треки сохраняются при большом смещении, но возможны ошибочные сопоставления разных объектов
+
+### ByteTrack (`configs/trackers/bytetrack.yaml`)
+
+ByteTrack использует двухэтапное сопоставление: сначала по высококонфидентным детекциям, затем по низкоконфидентным для «подхвата» уже существующих треков.
+
+| Параметр | По умолчанию | Описание |
+|----------|-------------|----------|
+| `track_high_thresh` | `0.25` | Порог для высококонфидентных детекций (1-й этап) |
+| `track_low_thresh` | `0.1` | Порог для низкоконфидентных детекций (2-й этап) |
+| `new_track_thresh` | `0.25` | Минимальная уверенность для инициализации нового трека |
+| `track_buffer` | `30` | Кадров до удаления потерянного трека |
+| `match_thresh` | `0.8` | Порог IoU для сопоставления |
+
+> `track_high_thresh` и `new_track_thresh` перезаписываются из `track_activation_threshold`.
+> `track_buffer` перезаписывается из `lost_track_buffer`.
+> `match_thresh` перезаписывается из `minimum_matching_threshold`.
+
+### BoT-SORT (`configs/trackers/botsort.yaml`)
+
+BoT-SORT расширяет ByteTrack двумя компонентами: **Global Motion Compensation (GMC)** — коррекция позиций треков при движении камеры — и опциональным **Re-ID** для повторной идентификации объектов по внешнему виду.
+
+| Параметр | По умолчанию | Описание |
+|----------|-------------|----------|
+| `track_high_thresh` | `0.5` | Порог для высококонфидентных детекций (1-й этап) |
+| `track_low_thresh` | `0.1` | Порог для низкоконфидентных детекций (2-й этап) |
+| `new_track_thresh` | `0.5` | Минимальная уверенность для инициализации нового трека |
+| `track_buffer` | `30` | Кадров до удаления потерянного трека |
+| `match_thresh` | `0.8` | Порог IoU для сопоставления |
+| `fuse_score` | `true` | Учитывать уверенность детекции в матрице стоимости IoU |
+| `gmc_method` | `sparseOptFlow` | Метод GMC: `sparseOptFlow` / `orb` / `ecc` / `none` |
+| `proximity_thresh` | `0.5` | Порог IoU, ниже которого задействуются признаки Re-ID |
+| `appearance_thresh` | `0.25` | Порог косинусного расстояния для сопоставления Re-ID |
+| `with_reid` | `false` | Включить Re-ID модель (требует отдельную модель весов) |
+
+> Параметры `track_high_thresh`, `new_track_thresh`, `track_buffer`, `match_thresh` перезаписываются так же, как в ByteTrack.
+
+**Когда использовать BoT-SORT вместо ByteTrack:**
+- Видео снято с движущейся камеры (дрон, PTZ) → GMC стабилизирует треки
+- Объекты часто надолго перекрываются → Re-ID помогает восстановить ID после окклюзии
+- При статичной камере ByteTrack быстрее и достаточно точен
 
 ---
 
@@ -113,6 +177,7 @@ display:
 |----------|-----|-------------|----------|
 | `enable` | bool | `true` | Включить/выключить подсчёт |
 | `count_zone` | list / null | `null` | Полигон зоны подсчёта |
+| `crossing_lines` | list / null | `null` | Линии для подсчёта пересечений IN/OUT |
 
 **Формат `count_zone`:**
 ```yaml
@@ -122,9 +187,15 @@ count_zone:
   - [500, 400]   # x3, y3
   - [100, 400]   # x4, y4
 ```
-Задаёт прямоугольник или произвольный полигон. Объекты считаются только при нахождении их центроида внутри зоны.
+Задаёт прямоугольник или произвольный полигон. Объекты считаются только при нахождении их центроида внутри зоны. `null` — считать все объекты в кадре.
 
-`null` — считать все объекты при первом появлении в кадре.
+**Формат `crossing_lines`:**
+```yaml
+crossing_lines:
+  - name: "Centre"
+    points: [[640, 0], [640, 720]]
+```
+Направление **in** — объект пересёк линию слева направо (относительно вектора от `points[0]` к `points[1]`). Направление **out** — противоположное.
 
 ---
 
@@ -137,8 +208,6 @@ count_zone:
 | `video_name` | str | `"output.mp4"` | Имя выходного файла |
 | `fps` | int | `30` | FPS выходного видео |
 
-**Важно:** параметр `save_video` предусмотрен в конфиге, но в текущей версии pipeline не реализован — видео не записывается.
-
 ---
 
 ## Секция `display`
@@ -149,10 +218,6 @@ count_zone:
 | `show_tracking_ids` | bool | `true` | Отображать bbox треков с ID |
 | `show_counts` | bool | `true` | Отображать панель счётчиков |
 | `font_size` | float | `1.0` | Масштаб шрифта аннотаций |
-
-**Влияние на FPS:**
-- Все флаги `false` убирают нагрузку рендерера — экономия ~1–2 мс/кадр
-- Значимого влияния на FPS не оказывают — bottleneck всегда в детекторе
 
 ---
 
@@ -167,13 +232,15 @@ detector:
   model: "yolov8n.pt"
   confidence_threshold: 0.5
   device: "cpu"
+tracker:
+  algorithm: "bytetrack"
 display:
   show_detections: false
   show_tracking_ids: true
   show_counts: true
 ```
 
-### Максимальная точность (GPU сервер)
+### Максимальная точность (GPU-сервер, статичная камера)
 ```yaml
 video:
   frame_width: 1920
@@ -183,14 +250,28 @@ detector:
   confidence_threshold: 0.4
   device: "cuda"
 tracker:
-  max_disappeared: 80
-  max_distance: 80
+  algorithm: "bytetrack"
+  track_activation_threshold: 0.3
+  auto_lost_track_buffer_seconds: 5.0
+  minimum_matching_threshold: 0.7
 ```
+
+### Движущаяся камера (дрон / PTZ)
+```yaml
+tracker:
+  algorithm: "botsort"
+  track_activation_threshold: 0.4
+  auto_lost_track_buffer_seconds: 4.0
+  minimum_matching_threshold: 0.7
+```
+BoT-SORT с GMC (`sparseOptFlow`) компенсирует смещение кадра и снижает количество потерянных треков при движении камеры.
 
 ### Отладка (видны все детекции и треки)
 ```yaml
 detector:
   confidence_threshold: 0.3
+tracker:
+  track_activation_threshold: 0.2
 display:
   show_detections: true
   show_tracking_ids: true

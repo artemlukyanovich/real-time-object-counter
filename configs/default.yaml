@@ -13,18 +13,25 @@ detector:
 tracker:
   # Tracking algorithm. Options: "bytetrack" | "botsort"
   # Each algorithm has its own template in configs/trackers/.
-  # The parameters below are applied on top of the template at runtime.
+  # The parameters below are applied on top of the template at runtime,
+  # overriding the corresponding fields in the selected template.
   algorithm: "bytetrack"
 
   # Minimum detection confidence to activate a new track.
+  # Applies to both ByteTrack and BoT-SORT.
+  # Overrides track_high_thresh and new_track_thresh in the tracker template.
   track_activation_threshold: 0.25
 
   # How many frames to keep a lost track alive before discarding it.
+  # Applies to both ByteTrack and BoT-SORT.
+  # Overrides track_buffer in the tracker template.
   # null = auto-calculate from FPS: round(video.fps * auto_lost_track_buffer_seconds).
   lost_track_buffer: null
   auto_lost_track_buffer_seconds: 3.0
 
   # IoU threshold used when matching detections to existing tracks.
+  # Applies to both ByteTrack and BoT-SORT.
+  # Overrides match_thresh in the tracker template.
   minimum_matching_threshold: 0.8
 
 counter:

@@ -1,6 +1,27 @@
+# ByteTrack tracker configuration template.
+# Parameters marked with (*) are overridden at runtime by the corresponding
+# fields in the [tracker] section of default.yaml:
+#   track_activation_threshold → track_high_thresh, new_track_thresh  (*)
+#   lost_track_buffer          → track_buffer                          (*)
+#   minimum_matching_threshold → match_thresh                          (*)
+
 tracker_type: bytetrack
+
+# Confidence threshold for high-quality detections (first matching stage). (*)
 track_high_thresh: 0.25
+
+# Confidence threshold for low-quality detections (second matching stage).
+# Low-confidence detections are only used to recover already-established tracks,
+# never to initialise new ones.
 track_low_thresh: 0.1
+
+# Minimum confidence required to initialise a new track. (*)
+# Should be >= track_high_thresh to avoid noisy tracks.
 new_track_thresh: 0.25
+
+# Frames to keep a lost track alive before discarding it. (*)
 track_buffer: 30
+
+# IoU threshold for matching detections to existing tracks. (*)
+# Higher values require tighter overlap → fewer false matches but more ID switches.
 match_thresh: 0.8
