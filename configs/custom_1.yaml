@@ -6,6 +6,7 @@ video:
 
 detector:
   model: "yolov8n.pt"  # nano model for speed
+#  model: "yolov8s.pt"  # компромисс: скорость/точность
   confidence_threshold: 0.5
   device: "cuda"  # or "cpu"
 
