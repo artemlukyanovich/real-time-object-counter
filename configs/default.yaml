@@ -16,8 +16,9 @@ tracker:
   track_activation_threshold: 0.25
 
   # How many frames to keep a lost track alive before discarding it.
-  # At 30 fps, 30 frames ≈ 1 second of re-identification window.
-  lost_track_buffer: 30
+  # null = auto-calculate from FPS: round(video.fps * auto_lost_track_buffer_seconds).
+  lost_track_buffer: null
+  auto_lost_track_buffer_seconds: 3.0
 
   # IoU threshold used when matching detections to existing tracks.
   minimum_matching_threshold: 0.8

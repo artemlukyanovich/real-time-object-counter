@@ -53,7 +53,7 @@ class ObjectCounterApp:
         track_activation_threshold = self.config.get(
             "tracker.track_activation_threshold", 0.25
         )
-        lost_track_buffer = self.config.get("tracker.lost_track_buffer", 30)
+        lost_track_buffer = self._resolve_lost_track_buffer(fps)
         minimum_matching_threshold = self.config.get(
             "tracker.minimum_matching_threshold", 0.8
         )
@@ -78,6 +78,19 @@ class ObjectCounterApp:
 
         font_size = self.config.get("display.font_size", 1.0)
         self.renderer = FrameRenderer(font_size)
+
+    def _resolve_lost_track_buffer(self, fps: float) -> int:
+        """Resolve lost_track_buffer from config.
+
+        If the config value is null, calculates it as:
+            round(fps * auto_lost_track_buffer_seconds)
+        """
+        explicit = self.config.get_raw("tracker.lost_track_buffer")
+        if explicit is not None:
+            return int(explicit)
+
+        seconds = self.config.get("tracker.auto_lost_track_buffer_seconds", 3.0)
+        return max(1, round(fps * float(seconds)))
 
     def _get_configured_fps(self) -> float:
         """Get FPS value used for FPS-dependent tracker settings."""

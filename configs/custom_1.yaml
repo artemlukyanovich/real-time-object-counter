@@ -12,7 +12,8 @@ detector:
 tracker:
   algorithm: "bytetrack"
   track_activation_threshold: 0.5
-  lost_track_buffer: 90   # ~3 s at 30 fps — good for slow/intermittent objects
+  lost_track_buffer: null
+  auto_lost_track_buffer_seconds: 3.0
   minimum_matching_threshold: 0.95
 
 counter:
