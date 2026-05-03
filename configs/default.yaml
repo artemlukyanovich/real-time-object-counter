@@ -11,6 +11,9 @@ detector:
   device: "cuda"  # or "cpu"
 
 tracker:
+  # Tracking algorithm. Options: "bytetrack" | "botsort"
+  # Each algorithm has its own template in configs/trackers/.
+  # The parameters below are applied on top of the template at runtime.
   algorithm: "bytetrack"
 
   # Minimum detection confidence to activate a new track.

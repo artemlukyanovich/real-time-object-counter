@@ -50,6 +50,7 @@ class ObjectCounterApp:
         self.detector = ObjectDetector(model, confidence, device)
 
         fps = self._get_configured_fps()
+        algorithm = self.config.get("tracker.algorithm", "bytetrack")
         track_activation_threshold = self.config.get(
             "tracker.track_activation_threshold", 0.25
         )
@@ -61,13 +62,14 @@ class ObjectCounterApp:
             model=self.detector.model,
             conf_threshold=confidence,
             frame_rate=int(fps),
+            algorithm=algorithm,
             track_activation_threshold=track_activation_threshold,
             lost_track_buffer=lost_track_buffer,
             minimum_matching_threshold=minimum_matching_threshold,
         )
 
         print(
-            "Tracker: ByteTrack (Ultralytics) | "
+            f"Tracker: {algorithm} (Ultralytics) | "
             f"fps={fps:.0f}, "
             f"activation_threshold={track_activation_threshold}, "
             f"lost_track_buffer={lost_track_buffer}, "

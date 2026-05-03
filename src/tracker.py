@@ -1,4 +1,4 @@
-"""Object tracking module using Ultralytics built-in ByteTrack."""
+"""Object tracking module using Ultralytics built-in ByteTrack / BoT-SORT."""
 
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -12,11 +12,14 @@ from ultralytics import YOLO
 # ((x1, y1, x2, y2), class_name, confidence)
 Detection = Tuple[Tuple[int, int, int, int], str, float]
 
-_TRACKERS_DIR = Path(__file__).parent.parent / ".runtime" / "trackers"
+_CONFIGS_DIR = Path(__file__).parent.parent / "configs" / "trackers"
+_RUNTIME_DIR = Path(__file__).parent.parent / ".runtime" / "trackers"
+
+_SUPPORTED_ALGORITHMS = ("bytetrack", "botsort")
 
 
 class ByteTracker:
-    """Ultralytics ByteTrack wrapper.
+    """Ultralytics tracker wrapper (ByteTrack or BoT-SORT).
 
     Uses model.track() (the official Ultralytics tracking API) so that
     detection and tracking run in a single inference pass.
@@ -32,6 +35,7 @@ class ByteTracker:
         model: YOLO,
         conf_threshold: float = 0.5,
         frame_rate: int = 30,
+        algorithm: str = "bytetrack",
         track_activation_threshold: float = 0.25,
         lost_track_buffer: int = 30,
         minimum_matching_threshold: float = 0.8,
@@ -42,16 +46,24 @@ class ByteTracker:
             model: Loaded Ultralytics YOLO model (shared with the detector).
             conf_threshold: Detection confidence threshold passed to model.track().
             frame_rate: FPS hint (stored for informational use).
+            algorithm: Tracking algorithm — "bytetrack" or "botsort".
             track_activation_threshold: Maps to track_high_thresh and
-                new_track_thresh in the ByteTrack YAML.
+                new_track_thresh in the tracker YAML.
             lost_track_buffer: Maps to track_buffer (frames to keep a lost
                 track alive before discarding it).
             minimum_matching_threshold: Maps to match_thresh (IoU threshold
                 for associating detections to tracks).
         """
+        if algorithm not in _SUPPORTED_ALGORITHMS:
+            raise ValueError(
+                f"Unknown tracker algorithm '{algorithm}'. "
+                f"Supported: {_SUPPORTED_ALGORITHMS}"
+            )
         self._model = model
         self._conf = conf_threshold
+        self.algorithm = algorithm
         self._yaml_path = self._write_tracker_yaml(
+            algorithm=algorithm,
             track_activation_threshold=track_activation_threshold,
             lost_track_buffer=lost_track_buffer,
             minimum_matching_threshold=minimum_matching_threshold,
@@ -109,29 +121,34 @@ class ByteTracker:
 
     def _write_tracker_yaml(
         self,
+        algorithm: str,
         track_activation_threshold: float,
         lost_track_buffer: int,
         minimum_matching_threshold: float,
     ) -> str:
-        """Write the ByteTrack YAML and return its path.
+        """Merge user params onto the configs/trackers template and write to .runtime/.
 
-        Parameter mapping:
+        Loads configs/trackers/{algorithm}.yaml as the base (carries all
+        algorithm-specific defaults), applies the three user-facing parameter
+        overrides, then writes the result to .runtime/trackers/{algorithm}.yaml.
+
+        Parameter mapping (same for every algorithm):
             track_activation_threshold → track_high_thresh, new_track_thresh
             lost_track_buffer          → track_buffer
             minimum_matching_threshold → match_thresh
         """
-        _TRACKERS_DIR.mkdir(parents=True, exist_ok=True)
-        yaml_path = _TRACKERS_DIR / "bytetrack.yaml"
+        template_path = _CONFIGS_DIR / f"{algorithm}.yaml"
+        with open(template_path) as fh:
+            params = yaml.safe_load(fh)
 
-        params = {
-            "tracker_type": "bytetrack",
-            "track_high_thresh": track_activation_threshold,
-            "track_low_thresh": 0.1,
-            "new_track_thresh": track_activation_threshold,
-            "track_buffer": lost_track_buffer,
-            "match_thresh": minimum_matching_threshold,
-        }
-        with open(yaml_path, "w") as fh:
+        params["track_high_thresh"] = track_activation_threshold
+        params["new_track_thresh"] = track_activation_threshold
+        params["track_buffer"] = lost_track_buffer
+        params["match_thresh"] = minimum_matching_threshold
+
+        _RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+        runtime_path = _RUNTIME_DIR / f"{algorithm}.yaml"
+        with open(runtime_path, "w") as fh:
             yaml.dump(params, fh, default_flow_style=False)
 
-        return str(yaml_path)
+        return str(runtime_path)
