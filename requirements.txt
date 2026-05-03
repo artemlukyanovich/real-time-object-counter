@@ -4,5 +4,6 @@ torchvision==0.16.2
 numpy==1.24.4
 opencv-python==4.8.1.78
 ultralytics==8.0.200
+supervision==0.28.0
 rich==13.7.0
 pyyaml==6.0.1

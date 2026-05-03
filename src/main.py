@@ -9,7 +9,7 @@ import cv2
 from src.config import Config
 from src.video_source import VideoSource
 from src.detector import ObjectDetector
-from src.tracker import CentroidTracker
+from src.tracker import ByteTracker
 from src.counter import ObjectCounter
 from src.metrics import PerformanceMetrics
 from src.renderer import FrameRenderer
@@ -50,15 +50,26 @@ class ObjectCounterApp:
         self.detector = ObjectDetector(model, confidence, device)
 
         fps = self._get_configured_fps()
-        max_disappeared = self._resolve_max_disappeared(fps)
-        max_distance = self._resolve_max_distance(fps)
-        self.tracker = CentroidTracker(max_disappeared, max_distance)
+        track_activation_threshold = self.config.get(
+            "tracker.track_activation_threshold", 0.25
+        )
+        lost_track_buffer = self.config.get("tracker.lost_track_buffer", 30)
+        minimum_matching_threshold = self.config.get(
+            "tracker.minimum_matching_threshold", 0.8
+        )
+        self.tracker = ByteTracker(
+            frame_rate=int(fps),
+            track_activation_threshold=track_activation_threshold,
+            lost_track_buffer=lost_track_buffer,
+            minimum_matching_threshold=minimum_matching_threshold,
+        )
 
         print(
-            "Tracker settings: "
-            f"fps={fps:.2f}, "
-            f"max_disappeared={max_disappeared}, "
-            f"max_distance={max_distance:.2f}"
+            "Tracker: ByteTrack | "
+            f"fps={fps:.0f}, "
+            f"activation_threshold={track_activation_threshold}, "
+            f"lost_track_buffer={lost_track_buffer}, "
+            f"matching_threshold={minimum_matching_threshold}"
         )
 
         crossing_lines = self.config.get("counter.crossing_lines", None)
@@ -76,47 +87,6 @@ class ObjectCounterApp:
             return 30.0
 
         return float(fps)
-
-    def _resolve_max_distance(self, fps: float) -> float:
-        """Resolve max centroid matching distance from config."""
-        max_distance = self.config.get_raw("tracker.max_distance")
-
-        if max_distance is not None:
-            return float(max_distance)
-
-        base = self.config.get("tracker.auto_max_distance_base", 50)
-        reference_fps = self.config.get("tracker.auto_max_distance_reference_fps", 30)
-        cap = self.config.get("tracker.auto_max_distance_cap", 200)
-
-        if fps <= 0:
-            fps = float(reference_fps)
-
-        resolved_distance = float(base) * float(reference_fps) / fps
-
-        if cap is not None:
-            resolved_distance = min(resolved_distance, float(cap))
-
-        return resolved_distance
-
-    def _resolve_max_disappeared(self, fps: float) -> int:
-        """Resolve max disappeared frames from config."""
-        max_disappeared = self.config.get_raw("tracker.max_disappeared")
-
-        if max_disappeared is not None:
-            return int(max_disappeared)
-
-        auto_seconds = self.config.get("tracker.auto_max_disappeared_seconds", 1.5)
-        resolved_frames = round(fps * float(auto_seconds))
-
-        min_frames = self.config.get("tracker.auto_max_disappeared_min", 5)
-        max_frames = self.config.get("tracker.auto_max_disappeared_max", 50)
-
-        resolved_frames = max(int(min_frames), resolved_frames)
-
-        if max_frames is not None:
-            resolved_frames = min(resolved_frames, int(max_frames))
-
-        return resolved_frames
 
     def run(self) -> None:
         print("Starting object counter. Press 'q' to exit.")

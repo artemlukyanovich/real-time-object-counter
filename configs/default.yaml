@@ -10,21 +10,17 @@ detector:
   device: "cuda"  # or "cpu"
 
 tracker:
-  algorithm: "centroid"  # or "kalman"
+  algorithm: "bytetrack"
 
-  # If null, calculated from FPS:
-  # video.fps * auto_max_disappeared_seconds
-  max_disappeared: null
-  auto_max_disappeared_seconds: 1.5
-  auto_max_disappeared_min: 5
-  auto_max_disappeared_max: 50
+  # Minimum detection confidence to activate a new track.
+  track_activation_threshold: 0.25
 
-  # If null, calculated from FPS:
-  # auto_max_distance_base * auto_max_distance_reference_fps / video.fps
-  max_distance: null
-  auto_max_distance_base: 50
-  auto_max_distance_reference_fps: 30
-  auto_max_distance_cap: 200
+  # How many frames to keep a lost track alive before discarding it.
+  # At 30 fps, 30 frames ≈ 1 second of re-identification window.
+  lost_track_buffer: 30
+
+  # IoU threshold used when matching detections to existing tracks.
+  minimum_matching_threshold: 0.8
 
 counter:
   enable: true

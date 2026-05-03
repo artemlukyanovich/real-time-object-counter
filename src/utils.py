@@ -1,7 +1,5 @@
 """Utility functions."""
 
-import cv2
-import numpy as np
 from typing import Tuple, List
 
 
@@ -33,12 +31,6 @@ def calculate_iou(box1: Tuple[int, int, int, int],
     union_area = box1_area + box2_area - inter_area
 
     return inter_area / union_area if union_area > 0 else 0
-
-
-def distance(point1: Tuple[int, int],
-             point2: Tuple[int, int]) -> float:
-    """Calculate Euclidean distance between two points."""
-    return np.sqrt((point1[0] - point2[0]) ** 2 + (point1[1] - point2[1]) ** 2)
 
 
 def point_side_of_line(

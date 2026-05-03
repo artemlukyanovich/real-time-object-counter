@@ -1,100 +1,114 @@
-"""Object tracking module."""
+"""Object tracking module using ByteTrack (via the supervision library)."""
 
 import numpy as np
-from typing import Dict, List, Tuple, Optional
-from src.utils import get_centroid, distance
-from collections import defaultdict
+import supervision as sv
+from typing import Dict, List, Tuple
 
 
-class CentroidTracker:
-    """Track objects using centroid matching."""
+# Re-export the Detection type alias used by detector.py so imports stay consistent.
+Detection = Tuple[Tuple[int, int, int, int], str, float]
 
-    def __init__(self, max_disappeared: int = 50, max_distance: float = 50):
-        """Initialize tracker.
+
+class ByteTracker:
+    """Wrap supervision's ByteTracker to match the project's tracker interface.
+
+    Input:  List[((x1, y1, x2, y2), class_name, confidence)]
+    Output: Dict[track_id, ((x1, y1, x2, y2), class_name)]
+    """
+
+    def __init__(
+        self,
+        frame_rate: int = 30,
+        track_activation_threshold: float = 0.25,
+        lost_track_buffer: int = 30,
+        minimum_matching_threshold: float = 0.8,
+    ) -> None:
+        """Initialise ByteTracker.
 
         Args:
-            max_disappeared: Max frames an object can disappear before removal
-            max_distance: Max distance for centroid matching
+            frame_rate: Video frame rate — used to convert the lost_track_buffer
+                (in frames) into a time window for track re-identification.
+            track_activation_threshold: Minimum detection confidence required to
+                activate a new track.
+            lost_track_buffer: Number of frames to keep a lost track alive before
+                discarding it.
+            minimum_matching_threshold: IoU threshold for matching detections to
+                existing tracks.
         """
-        self.max_disappeared = max_disappeared
-        self.max_distance = max_distance
-        self.next_id = 0
-        self.objects: Dict[int, Tuple[int, int]] = {}
-        self.disappeared: Dict[int, int] = defaultdict(int)
-        self.class_names: Dict[int, str] = {}
+        self._tracker = sv.ByteTrack(
+            track_activation_threshold=track_activation_threshold,
+            lost_track_buffer=lost_track_buffer,
+            minimum_matching_threshold=minimum_matching_threshold,
+            frame_rate=frame_rate,
+        )
 
-    def update(self, detections: List[Tuple[Tuple[int, int, int, int], str, float]]
-               ) -> Dict[int, Tuple[Tuple[int, int, int, int], str]]:
-        """Update tracker with new detections.
+        # Bidirectional mapping between string class names and integer IDs
+        # required by supervision's Detections.
+        self._name_to_id: Dict[str, int] = {}
+        self._id_to_name: Dict[int, str] = {}
+        self._next_class_id: int = 0
+
+    # ------------------------------------------------------------------
+    # Public interface (matches the old CentroidTracker signature)
+    # ------------------------------------------------------------------
+
+    def update(
+        self,
+        detections: List[Detection],
+    ) -> Dict[int, Tuple[Tuple[int, int, int, int], str]]:
+        """Update tracker with detections from the current frame.
 
         Args:
-            detections: List of (bbox, class_name, confidence) tuples
+            detections: List of (bbox, class_name, confidence).
 
         Returns:
-            Dictionary of {track_id: (bbox, class_name)}
+            Dictionary of {track_id: (bbox, class_name)} for all active tracks.
         """
-        if len(detections) == 0:
-            # Mark all as disappeared
-            for track_id in list(self.disappeared.keys()):
-                self.disappeared[track_id] += 1
-                if self.disappeared[track_id] > self.max_disappeared:
-                    self._remove_track(track_id)
+        sv_detections = self._to_sv_detections(detections)
+        tracked = self._tracker.update_with_detections(sv_detections)
+
+        if tracked.tracker_id is None or len(tracked) == 0:
             return {}
 
-        # Extract centroids from detections
-        centroids = np.zeros((len(detections), 2), dtype="int")
-        for i, (bbox, _, _) in enumerate(detections):
-            centroids[i] = get_centroid(bbox)
+        result: Dict[int, Tuple[Tuple[int, int, int, int], str]] = {}
+        for i, track_id in enumerate(tracked.tracker_id):
+            x1, y1, x2, y2 = (int(v) for v in tracked.xyxy[i])
+            class_name = self._id_to_name.get(int(tracked.class_id[i]), "unknown")
+            result[int(track_id)] = ((x1, y1, x2, y2), class_name)
 
-        # Match detections to existing objects
-        matched_objects = {}
-        used_detections = set()
-
-        # Try to match existing objects to detections
-        for track_id, centroid in self.objects.items():
-            distances = [distance(centroid, c) for c in centroids]
-            min_dist_idx = np.argmin(distances)
-            min_dist = distances[min_dist_idx]
-
-            if min_dist < self.max_distance and min_dist_idx not in used_detections:
-                bbox, class_name, _ = detections[min_dist_idx]
-                matched_objects[track_id] = (bbox, class_name)
-                used_detections.add(min_dist_idx)
-                self.disappeared[track_id] = 0
-                self.objects[track_id] = tuple(centroids[min_dist_idx])
-
-        # Register new detections
-        for i, (bbox, class_name, _) in enumerate(detections):
-            if i not in used_detections:
-                self.objects[self.next_id] = tuple(centroids[i])
-                self.class_names[self.next_id] = class_name
-                matched_objects[self.next_id] = (bbox, class_name)
-                self.next_id += 1
-
-        # Handle disappeared objects
-        for track_id in list(self.disappeared.keys()):
-            if track_id not in matched_objects:
-                self.disappeared[track_id] += 1
-                if self.disappeared[track_id] > self.max_disappeared:
-                    self._remove_track(track_id)
-
-        return matched_objects
-
-    def _remove_track(self, track_id: int) -> None:
-        """Remove a track."""
-        if track_id in self.objects:
-            del self.objects[track_id]
-        if track_id in self.disappeared:
-            del self.disappeared[track_id]
-        if track_id in self.class_names:
-            del self.class_names[track_id]
-
-    def get_tracks(self) -> Dict[int, Tuple[int, int]]:
-        """Get current tracks as {track_id: centroid}."""
-        return self.objects.copy()
+        return result
 
     def reset(self) -> None:
-        """Reset tracker."""
-        self.objects.clear()
-        self.disappeared.clear()
-        self.class_names.clear()
+        """Reset tracker state."""
+        self._tracker.reset()
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _get_class_id(self, class_name: str) -> int:
+        if class_name not in self._name_to_id:
+            self._name_to_id[class_name] = self._next_class_id
+            self._id_to_name[self._next_class_id] = class_name
+            self._next_class_id += 1
+        return self._name_to_id[class_name]
+
+    def _to_sv_detections(self, detections: List[Detection]) -> sv.Detections:
+        if not detections:
+            return sv.Detections(
+                xyxy=np.empty((0, 4), dtype=np.float32),
+                confidence=np.empty(0, dtype=np.float32),
+                class_id=np.empty(0, dtype=np.int_),
+            )
+
+        xyxy = np.array(
+            [[b[0], b[1], b[2], b[3]] for b, _, _ in detections],
+            dtype=np.float32,
+        )
+        confidences = np.array([c for _, _, c in detections], dtype=np.float32)
+        class_ids = np.array(
+            [self._get_class_id(cn) for _, cn, _ in detections],
+            dtype=np.int_,
+        )
+
+        return sv.Detections(xyxy=xyxy, confidence=confidences, class_id=class_ids)
