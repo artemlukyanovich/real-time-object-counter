@@ -11,10 +11,12 @@ detector:
   device: "cuda"  # or "cpu"
 
 tracker:
-  # Tracking algorithm. Options: "bytetrack" | "botsort"
+  # Tracking algorithm. Options: "bytetrack" | "botsort" | "botsort_reid"
   # Each algorithm has its own template in configs/trackers/.
   # The parameters below are applied on top of the template at runtime,
   # overriding the corresponding fields in the selected template.
+  # "botsort_reid" enables appearance-based Re-ID (more stable IDs across
+  # occlusions at the cost of speed; ReID model auto-downloaded on first run).
   algorithm: "bytetrack"
 
   # Minimum detection confidence to activate a new track.

@@ -15,7 +15,7 @@ Detection = Tuple[Tuple[int, int, int, int], str, float]
 _CONFIGS_DIR = Path(__file__).parent.parent / "configs" / "trackers"
 _RUNTIME_DIR = Path(__file__).parent.parent / ".runtime" / "trackers"
 
-_SUPPORTED_ALGORITHMS = ("bytetrack", "botsort")
+_SUPPORTED_ALGORITHMS = ("bytetrack", "botsort", "botsort_reid")
 
 
 class ByteTracker:
@@ -46,7 +46,8 @@ class ByteTracker:
             model: Loaded Ultralytics YOLO model (shared with the detector).
             conf_threshold: Detection confidence threshold passed to model.track().
             frame_rate: FPS hint (stored for informational use).
-            algorithm: Tracking algorithm — "bytetrack" or "botsort".
+            algorithm: Tracking algorithm — "bytetrack", "botsort", or
+                "botsort_reid" (BoT-SORT with appearance-based Re-ID).
             track_activation_threshold: Maps to track_high_thresh and
                 new_track_thresh in the tracker YAML.
             lost_track_buffer: Maps to track_buffer (frames to keep a lost

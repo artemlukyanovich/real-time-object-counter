@@ -12,14 +12,14 @@ detector:
   device: "cuda"  # or "cpu"
 
 tracker:
-  # Tracking algorithm. Options: "bytetrack" | "botsort"
+  # Tracking algorithm. Options: "bytetrack" | "botsort" | "botsort_reid"
   # Each algorithm has its own template in configs/trackers/.
   # The parameters below are applied on top of the template at runtime.
-  algorithm: "botsort"
-  track_activation_threshold: 0.5
+  algorithm: "botsort_reid"
+  track_activation_threshold: 0.75
   lost_track_buffer: null
   auto_lost_track_buffer_seconds: 3.0
-  minimum_matching_threshold: 0.95
+  minimum_matching_threshold: 0.975
 
 counter:
   enable: true
