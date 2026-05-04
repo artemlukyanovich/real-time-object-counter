@@ -1,8 +1,18 @@
-# Конфигурация (config.yaml)
+# Конфигурация
 
-Файл конфигурации: `configs/default.yaml`
+## Файлы конфигурации
+
+| Файл | Назначение |
+|------|-----------|
+| `configs/default.yaml` | Основной конфиг по умолчанию |
+| `configs/experiments/*.yaml` | Конфиги экспериментов (та же структура, что у `default.yaml`) |
 
 Загружается классом `Config` (`src/config.py`). Доступ к параметрам — через dot-notation: `config.get("detector.confidence_threshold")`.
+
+**Запуск с кастомным конфигом:**
+```bash
+python -m src.main --config configs/experiments/my_experiment.yaml
+```
 
 ---
 
@@ -24,9 +34,15 @@ detector:
 tracker:
   algorithm: "bytetrack"
   track_activation_threshold: 0.25
+  track_low_threshold: 0.1
+  minimum_matching_threshold: 0.8
   lost_track_buffer: null
   auto_lost_track_buffer_seconds: 3.0
-  minimum_matching_threshold: 0.8
+  fuse_score: true          # BoT-SORT only
+  gmc_method: "sparseOptFlow"  # BoT-SORT only
+  reid_weights: "osnet_x0_25_market.pt"  # botsort_reid only
+  proximity_threshold: 0.5    # botsort_reid only
+  appearance_threshold: 0.25  # botsort_reid only
 
 counter:
   enable: true
@@ -102,26 +118,25 @@ Ultralytics автоматически скачивает веса при пер
 
 ## Секция `tracker`
 
-Секция содержит два уровня настроек:
+Все настройки трекера берутся из выбранного конфига (`default.yaml` или `configs/experiments/*.yaml`). При запуске `tracker.py` генерирует YAML для Ultralytics в `.runtime/trackers/` (папка в `.gitignore`) — редактировать эти файлы не нужно.
 
-1. **Общие параметры** в `default.yaml` — задают алгоритм и три ключевых значения, одинаковых для ByteTrack и BoT-SORT.
-2. **Шаблоны алгоритмов** в `configs/trackers/bytetrack.yaml` и `configs/trackers/botsort.yaml` — содержат полный набор параметров конкретного алгоритма. Общие параметры из п.1 перезаписывают соответствующие поля шаблона при запуске.
-
-### Общие параметры (`default.yaml`)
+### Общие параметры
 
 | Параметр | Тип | По умолчанию | Описание |
 |----------|-----|-------------|----------|
 | `algorithm` | str | `"bytetrack"` | Алгоритм трекинга: `"bytetrack"`, `"botsort"` или `"botsort_reid"` |
 | `track_activation_threshold` | float | `0.25` | Минимальная уверенность для активации нового трека |
+| `track_low_threshold` | float | `0.1` | Минимальная уверенность для второго этапа сопоставления (низкоконфидентные детекции) |
+| `minimum_matching_threshold` | float | `0.8` | Порог IoU для сопоставления детекций с треками |
 | `lost_track_buffer` | int / null | `null` | Кадров до удаления потерянного трека; `null` = авторасчёт |
 | `auto_lost_track_buffer_seconds` | float | `3.0` | Секунды для авторасчёта буфера: `round(fps × seconds)` |
-| `minimum_matching_threshold` | float | `0.8` | Порог IoU для сопоставления детекций с треками |
 
-**Маппинг на поля шаблонов:**
+**Маппинг на поля Ultralytics YAML** (генерируется автоматически в `.runtime/trackers/`):
 
-| Параметр `default.yaml` | Поле в шаблоне трекера |
-|-------------------------|------------------------|
+| Параметр конфига | Поле в Ultralytics YAML |
+|-----------------|-------------------------|
 | `track_activation_threshold` | `track_high_thresh`, `new_track_thresh` |
+| `track_low_threshold` | `track_low_thresh` |
 | `lost_track_buffer` | `track_buffer` |
 | `minimum_matching_threshold` | `match_thresh` |
 
@@ -138,55 +153,38 @@ Ultralytics автоматически скачивает веса при пер
 - Высокое значение (0.8+): требуется сильное пересечение bbox → меньше ложных сопоставлений, больше разрывов треков при быстром движении
 - Низкое значение (0.4–0.5): треки сохраняются при большом смещении, но возможны ошибочные сопоставления разных объектов
 
-### ByteTrack (`configs/trackers/bytetrack.yaml`)
+### ByteTrack (`algorithm: "bytetrack"`)
 
 ByteTrack использует двухэтапное сопоставление: сначала по высококонфидентным детекциям, затем по низкоконфидентным для «подхвата» уже существующих треков.
 
-| Параметр | По умолчанию | Описание |
-|----------|-------------|----------|
-| `track_high_thresh` | `0.25` | Порог для высококонфидентных детекций (1-й этап) |
-| `track_low_thresh` | `0.1` | Порог для низкоконфидентных детекций (2-й этап) |
-| `new_track_thresh` | `0.25` | Минимальная уверенность для инициализации нового трека |
-| `track_buffer` | `30` | Кадров до удаления потерянного трека |
-| `match_thresh` | `0.8` | Порог IoU для сопоставления |
+Все параметры управляются через общие настройки выше — дополнительных параметров нет.
 
-> `track_high_thresh` и `new_track_thresh` перезаписываются из `track_activation_threshold`.
-> `track_buffer` перезаписывается из `lost_track_buffer`.
-> `match_thresh` перезаписывается из `minimum_matching_threshold`.
-
-### BoT-SORT (`configs/trackers/botsort.yaml`)
+### BoT-SORT (`algorithm: "botsort"`)
 
 BoT-SORT расширяет ByteTrack двумя компонентами: **Global Motion Compensation (GMC)** — коррекция позиций треков при движении камеры — и опциональным **Re-ID** для повторной идентификации объектов по внешнему виду.
 
-| Параметр | По умолчанию | Описание |
-|----------|-------------|----------|
-| `track_high_thresh` | `0.5` | Порог для высококонфидентных детекций (1-й этап) |
-| `track_low_thresh` | `0.1` | Порог для низкоконфидентных детекций (2-й этап) |
-| `new_track_thresh` | `0.5` | Минимальная уверенность для инициализации нового трека |
-| `track_buffer` | `30` | Кадров до удаления потерянного трека |
-| `match_thresh` | `0.8` | Порог IoU для сопоставления |
-| `fuse_score` | `true` | Учитывать уверенность детекции в матрице стоимости IoU |
-| `gmc_method` | `sparseOptFlow` | Метод GMC: `sparseOptFlow` / `orb` / `ecc` / `none` |
-| `proximity_thresh` | `0.5` | Порог IoU, ниже которого задействуются признаки Re-ID |
-| `appearance_thresh` | `0.25` | Порог косинусного расстояния для сопоставления Re-ID |
-| `with_reid` | `false` | Включить Re-ID модель (требует отдельную модель весов) |
+Дополнительные параметры (сверх общих):
 
-> Параметры `track_high_thresh`, `new_track_thresh`, `track_buffer`, `match_thresh` перезаписываются так же, как в ByteTrack.
+| Параметр конфига | По умолчанию | Описание |
+|-----------------|-------------|----------|
+| `fuse_score` | `true` | Учитывать уверенность детекции в матрице стоимости IoU |
+| `gmc_method` | `"sparseOptFlow"` | Метод GMC: `sparseOptFlow` / `orb` / `ecc` / `none` |
 
 **Когда использовать BoT-SORT вместо ByteTrack:**
 - Видео снято с движущейся камеры (дрон, PTZ) → GMC стабилизирует треки
 - При статичной камере ByteTrack быстрее и достаточно точен
 
-### BoT-SORT с Re-ID (`configs/trackers/botsort_reid.yaml`)
+### BoT-SORT с Re-ID (`algorithm: "botsort_reid"`)
 
 Тот же BoT-SORT, но с включённой моделью Re-ID (`with_reid: true`). Позволяет восстанавливать ID объекта по визуальному сходству даже после длительного исчезновения из кадра.
 
 Дополнительные параметры по сравнению с `botsort`:
 
-| Параметр | По умолчанию | Описание |
-|----------|-------------|----------|
-| `with_reid` | `true` | Включить Re-ID |
-| `reid_weights` | `osnet_x0_25_market.pt` | Веса Re-ID модели (скачиваются автоматически) |
+| Параметр конфига | По умолчанию | Описание |
+|-----------------|-------------|----------|
+| `reid_weights` | `"osnet_x0_25_market.pt"` | Веса Re-ID модели (скачиваются автоматически) |
+| `proximity_threshold` | `0.5` | Порог IoU, ниже которого задействуются признаки Re-ID |
+| `appearance_threshold` | `0.25` | Порог косинусного расстояния для сопоставления Re-ID |
 
 **Доступные Re-ID модели:**
 
@@ -198,7 +196,7 @@ BoT-SORT расширяет ByteTrack двумя компонентами: **Glo
 | `osnet_x0_25_msmt17.pt` | ~1 МБ | MSMT17 | Более разнообразный датасет |
 | `osnet_x1_0_msmt17.pt` | ~11 МБ | MSMT17 | Максимальная точность Re-ID |
 
-> Все модели скачиваются Ultralytics автоматически при первом запуске. Указать другую модель можно прямо в `botsort_reid.yaml` → поле `reid_weights`.
+> Все модели скачиваются Ultralytics автоматически при первом запуске. Поменять модель можно через параметр `reid_weights` в конфиге.
 
 **Влияние на производительность:**
 - `osnet_x0_25_*` добавляет ~2–5 мс на кадр на GPU; на CPU — ~10–30 мс

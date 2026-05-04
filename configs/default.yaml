@@ -12,29 +12,55 @@ detector:
 
 tracker:
   # Tracking algorithm. Options: "bytetrack" | "botsort" | "botsort_reid"
-  # Each algorithm has its own template in configs/trackers/.
-  # The parameters below are applied on top of the template at runtime,
-  # overriding the corresponding fields in the selected template.
+  # Tracker YAML for Ultralytics is generated automatically at runtime in
+  # .runtime/trackers/ — editing those files is not needed.
   # "botsort_reid" enables appearance-based Re-ID (more stable IDs across
   # occlusions at the cost of speed; ReID model auto-downloaded on first run).
   algorithm: "bytetrack"
 
+  # --- Shared thresholds (all algorithms) ---
+
   # Minimum detection confidence to activate a new track.
-  # Applies to both ByteTrack and BoT-SORT.
-  # Overrides track_high_thresh and new_track_thresh in the tracker template.
+  # Maps to: track_high_thresh, new_track_thresh
   track_activation_threshold: 0.25
 
+  # Minimum confidence for second-stage (low-confidence) detection matching.
+  # Maps to: track_low_thresh
+  track_low_threshold: 0.1
+
+  # IoU threshold used when matching detections to existing tracks.
+  # Maps to: match_thresh
+  minimum_matching_threshold: 0.8
+
+  # --- Lost track handling ---
+
   # How many frames to keep a lost track alive before discarding it.
-  # Applies to both ByteTrack and BoT-SORT.
-  # Overrides track_buffer in the tracker template.
   # null = auto-calculate from FPS: round(video.fps * auto_lost_track_buffer_seconds).
+  # Maps to: track_buffer
   lost_track_buffer: null
   auto_lost_track_buffer_seconds: 3.0
 
-  # IoU threshold used when matching detections to existing tracks.
-  # Applies to both ByteTrack and BoT-SORT.
-  # Overrides match_thresh in the tracker template.
-  minimum_matching_threshold: 0.8
+  # --- BoT-SORT specific (used with algorithm: "botsort" or "botsort_reid") ---
+
+  # Fuse detection confidence score into the IoU cost matrix.
+  fuse_score: true
+
+  # Global Motion Compensation method. Stabilises tracks when camera moves.
+  # Options: "sparseOptFlow" | "orb" | "ecc" | "none"
+  gmc_method: "sparseOptFlow"
+
+  # --- ReID (used only with algorithm: "botsort_reid") ---
+
+  # Re-ID model weights. Auto-downloaded by Ultralytics on first run.
+  # Options: osnet_x0_25_market.pt | osnet_x0_5_market.pt | osnet_x1_0_market.pt
+  #          osnet_x0_25_msmt17.pt | osnet_x1_0_msmt17.pt
+  reid_weights: "osnet_x0_25_market.pt"
+
+  # IoU threshold below which appearance features are used for Re-ID matching.
+  proximity_threshold: 0.5
+
+  # Cosine distance threshold for Re-ID appearance matching.
+  appearance_threshold: 0.25
 
 counter:
   enable: true

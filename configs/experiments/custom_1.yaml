@@ -13,8 +13,6 @@ detector:
 
 tracker:
   # Tracking algorithm. Options: "bytetrack" | "botsort" | "botsort_reid"
-  # Each algorithm has its own template in configs/trackers/.
-  # The parameters below are applied on top of the template at runtime.
   algorithm: "botsort_reid"
   track_activation_threshold: 0.75
   lost_track_buffer: null

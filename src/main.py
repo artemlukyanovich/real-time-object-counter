@@ -9,7 +9,7 @@ import cv2
 from src.config import Config
 from src.video_source import VideoSource
 from src.detector import ObjectDetector
-from src.tracker import ByteTracker
+from src.tracker import UltralyticsTracker
 from src.counter import ObjectCounter
 from src.metrics import PerformanceMetrics
 from src.renderer import FrameRenderer
@@ -54,18 +54,32 @@ class ObjectCounterApp:
         track_activation_threshold = self.config.get(
             "tracker.track_activation_threshold", 0.25
         )
+        track_low_threshold = self.config.get("tracker.track_low_threshold", 0.1)
         lost_track_buffer = self._resolve_lost_track_buffer(fps)
         minimum_matching_threshold = self.config.get(
             "tracker.minimum_matching_threshold", 0.8
         )
-        self.tracker = ByteTracker(
+        fuse_score = self.config.get("tracker.fuse_score", True)
+        gmc_method = self.config.get("tracker.gmc_method", "sparseOptFlow")
+        reid_weights = self.config.get(
+            "tracker.reid_weights", "osnet_x0_25_market.pt"
+        )
+        proximity_threshold = self.config.get("tracker.proximity_threshold", 0.5)
+        appearance_threshold = self.config.get("tracker.appearance_threshold", 0.25)
+        self.tracker = UltralyticsTracker(
             model=self.detector.model,
             conf_threshold=confidence,
             frame_rate=int(fps),
             algorithm=algorithm,
             track_activation_threshold=track_activation_threshold,
+            track_low_threshold=track_low_threshold,
             lost_track_buffer=lost_track_buffer,
             minimum_matching_threshold=minimum_matching_threshold,
+            fuse_score=fuse_score,
+            gmc_method=gmc_method,
+            reid_weights=reid_weights,
+            proximity_threshold=proximity_threshold,
+            appearance_threshold=appearance_threshold,
         )
 
         print(
