@@ -1,7 +1,7 @@
 """Object tracking module using Ultralytics built-in ByteTrack / BoT-SORT."""
 
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import yaml
@@ -84,6 +84,7 @@ class UltralyticsTracker:
         reid_weights: str = "osnet_x0_25_market.pt",
         proximity_threshold: float = 0.5,
         appearance_threshold: float = 0.25,
+        allowed_classes: Optional[List[str]] = None,
     ) -> None:
         """Initialise UltralyticsTracker.
 
@@ -107,6 +108,9 @@ class UltralyticsTracker:
             reid_weights: botsort_reid only. Re-ID model weights file.
             proximity_threshold: botsort_reid only. Maps to proximity_thresh.
             appearance_threshold: botsort_reid only. Maps to appearance_thresh.
+            allowed_classes: Optional list of class names to detect/track.
+                None or empty list = all classes. Unknown names are warned and
+                skipped. Example: ["person", "car"].
         """
         if algorithm not in _SUPPORTED_ALGORITHMS:
             raise ValueError(
@@ -116,6 +120,7 @@ class UltralyticsTracker:
         self._model = model
         self._conf = conf_threshold
         self.algorithm = algorithm
+        self._allowed_class_ids = self._resolve_class_ids(allowed_classes)
         self._yaml_path = self._write_tracker_yaml(
             algorithm=algorithm,
             track_activation_threshold=track_activation_threshold,
@@ -151,6 +156,7 @@ class UltralyticsTracker:
             tracker=self._yaml_path,
             conf=self._conf,
             verbose=False,
+            classes=self._allowed_class_ids,
         )
 
         detections: List[Detection] = []
@@ -178,6 +184,30 @@ class UltralyticsTracker:
             self._model.predictor.trackers = {}
 
     # ── internal ─────────────────────────────────────────────────────
+
+    def _resolve_class_ids(
+        self, allowed_classes: Optional[List[str]]
+    ) -> Optional[List[int]]:
+        """Map class names to YOLO class IDs using the loaded model.
+
+        Returns None (= all classes) if allowed_classes is None/empty.
+        Unknown names are warned and skipped.
+        """
+        if not allowed_classes:
+            return None
+
+        name_to_id = {v: k for k, v in self._model.names.items()}
+        ids = []
+        for name in allowed_classes:
+            if name in name_to_id:
+                ids.append(name_to_id[name])
+            else:
+                print(
+                    f"Warning: allowed_classes: '{name}' not found in model. "
+                    f"Available: {sorted(name_to_id)}"
+                )
+
+        return ids if ids else None
 
     def _write_tracker_yaml(
         self,

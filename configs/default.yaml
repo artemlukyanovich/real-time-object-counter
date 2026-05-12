@@ -9,6 +9,9 @@ detector:
   model: "yolov8n.pt"  # nano model for speed
   confidence_threshold: 0.5
   device: "cuda"  # or "cpu"
+  # Filter detections to specific classes only. null = detect all classes.
+  # Use COCO class names, e.g.: ["person"] or ["person", "car", "truck"]
+  allowed_classes: ["person"]
 
 tracker:
   # Tracking algorithm. Options: "bytetrack" | "botsort" | "botsort_reid"

@@ -66,6 +66,7 @@ class ObjectCounterApp:
         )
         proximity_threshold = self.config.get("tracker.proximity_threshold", 0.5)
         appearance_threshold = self.config.get("tracker.appearance_threshold", 0.25)
+        allowed_classes = self.config.get("detector.allowed_classes", None)
         self.tracker = UltralyticsTracker(
             model=self.detector.model,
             conf_threshold=confidence,
@@ -80,6 +81,7 @@ class ObjectCounterApp:
             reid_weights=reid_weights,
             proximity_threshold=proximity_threshold,
             appearance_threshold=appearance_threshold,
+            allowed_classes=allowed_classes,
         )
 
         print(

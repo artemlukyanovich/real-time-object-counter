@@ -10,6 +10,7 @@ detector:
   model: "yolov8s.pt"  # компромисс: скорость/точность
   confidence_threshold: 0.5
   device: "cuda"  # or "cpu"
+  allowed_classes: ["person"]  # Use COCO class names, e.g.: ["person"] or ["person", "car", "truck"]
 
 tracker:
   # Tracking algorithm. Options: "bytetrack" | "botsort" | "botsort_reid"

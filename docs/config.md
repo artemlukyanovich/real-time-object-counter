@@ -30,6 +30,7 @@ detector:
   model: "yolov8n.pt"
   confidence_threshold: 0.5
   device: "cuda"
+  allowed_classes: null
 
 tracker:
   algorithm: "bytetrack"
@@ -87,6 +88,23 @@ display:
 | `model` | str | `"yolov8n.pt"` | Имя или путь к файлу весов YOLOv8 |
 | `confidence_threshold` | float | `0.5` | Минимальная уверенность детекции [0.0–1.0] |
 | `device` | str | `"cuda"` | Устройство инференса: `"cuda"` или `"cpu"` |
+| `allowed_classes` | list / null | `null` | Список классов для детекции/трекинга. `null` = все классы. Пример: `["person"]` или `["person", "car", "truck"]` |
+
+**Фильтрация классов (`allowed_classes`):**
+
+Передаётся напрямую в Ultralytics как `classes=[id, ...]` — фильтрация происходит на уровне модели до трекера, поэтому не влияет на скорость трекинга. Имена классов соответствуют меткам датасета COCO (для стандартных моделей YOLOv8/YOLO11).
+
+```yaml
+# Считать только людей:
+detector:
+  allowed_classes: ["person"]
+
+# Считать транспорт:
+detector:
+  allowed_classes: ["car", "truck", "bus", "motorcycle"]
+```
+
+Если указанный класс не найден в модели — выводится предупреждение со списком доступных классов, и этот класс игнорируется.
 
 **Выбор модели:**
 
