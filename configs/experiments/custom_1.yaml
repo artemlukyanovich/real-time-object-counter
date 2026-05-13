@@ -6,15 +6,15 @@ video:
   frame_height: 720
 
 detector:
-#  model: "yolov8n.pt"  # nano model for speed
-  model: "yolov8s.pt"  # компромисс: скорость/точность
+  model: "yolov8n.pt"  # nano model for speed
+#  model: "yolov8s.pt"  # компромисс: скорость/точность
   confidence_threshold: 0.5
   device: "cuda"  # or "cpu"
   allowed_classes: ["person"]  # Use COCO class names, e.g.: ["person"] or ["person", "car", "truck"]
 
 tracker:
   # Tracking algorithm. Options: "bytetrack" | "botsort" | "botsort_reid"
-  algorithm: "botsort_reid"
+  algorithm: "bytetrack"
   track_activation_threshold: 0.75
   lost_track_buffer: null
   auto_lost_track_buffer_seconds: 3.0

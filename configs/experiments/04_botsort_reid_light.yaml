@@ -1,0 +1,46 @@
+experiment:
+  name: "04_botsort_reid_light"
+  notes: "BoT-SORT + lightweight ReID model."
+
+video:
+  source: 0
+  frame_width: 640
+  frame_height: 360
+  fps: null
+  fallback_fps: 30
+
+detector:
+  model: "yolov8n.pt"
+  confidence_threshold: 0.35
+  device: "cuda"
+  allowed_classes: null
+
+tracker:
+  algorithm: "botsort_reid"
+  track_activation_threshold: 0.25
+  track_low_threshold: 0.1
+  minimum_matching_threshold: 0.8
+  lost_track_buffer: null
+  auto_lost_track_buffer_seconds: 3.0
+  fuse_score: true
+  gmc_method: "sparseOptFlow"
+  reid_weights: "osnet_x0_25_market.pt"
+  proximity_threshold: 0.5
+  appearance_threshold: 0.25
+
+counter:
+  enable: true
+  count_zone: null
+  crossing_lines: null
+
+display:
+  show_detections: true
+  show_tracking_ids: true
+  show_counts: true
+  font_size: 0.7
+
+output:
+  save_video: false
+  output_dir: "outputs"
+  video_name: "04_botsort_reid_light.mp4"
+  fps: 30
