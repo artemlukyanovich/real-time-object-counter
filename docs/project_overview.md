@@ -73,6 +73,20 @@ VideoSource → UltralyticsTracker → Counter → Renderer → Display
 
 ---
 
+## Утилиты
+
+### extract_frames — `scripts/extract_frames.py`
+
+Извлекает каждый N-й кадр из видеофайла и сохраняет как JPG. Используется для подготовки датасетов и отладки.
+
+```bash
+python scripts/extract_frames.py data/raw_videos/clip.mp4 data/frames/clip --step 15
+```
+
+Подробнее — в `docs/extract_frames.md`.
+
+---
+
 ## Конфигурация
 
 | Файл | Назначение |
