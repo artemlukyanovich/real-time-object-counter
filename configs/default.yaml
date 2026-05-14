@@ -25,15 +25,19 @@ tracker:
 
   # Minimum detection confidence to activate a new track.
   # Maps to: track_high_thresh, new_track_thresh
-  track_activation_threshold: 0.25
+  track_activation_threshold: 0.5
 
   # Minimum confidence for second-stage (low-confidence) detection matching.
   # Maps to: track_low_thresh
   track_low_threshold: 0.1
 
-  # IoU threshold used when matching detections to existing tracks.
+  # IoU cost threshold for matching detections to existing tracks.
+  # Higher value: a lower IoU is still accepted as a match → object keeps its
+  # ID after passing behind an obstacle (e.g. a lamppost).
+  # Lower value: only high-overlap detections are matched → brief occlusion
+  # causes an ID switch and a new track is created.
   # Maps to: match_thresh
-  minimum_matching_threshold: 0.8
+  matching_cost_threshold: 0.8
 
   # --- Lost track handling ---
 

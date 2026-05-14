@@ -56,8 +56,8 @@ class ObjectCounterApp:
         )
         track_low_threshold = self.config.get("tracker.track_low_threshold", 0.1)
         lost_track_buffer = self._resolve_lost_track_buffer(fps)
-        minimum_matching_threshold = self.config.get(
-            "tracker.minimum_matching_threshold", 0.8
+        matching_cost_threshold = self.config.get(
+            "tracker.matching_cost_threshold", 0.8
         )
         fuse_score = self.config.get("tracker.fuse_score", True)
         gmc_method = self.config.get("tracker.gmc_method", "sparseOptFlow")
@@ -75,7 +75,7 @@ class ObjectCounterApp:
             track_activation_threshold=track_activation_threshold,
             track_low_threshold=track_low_threshold,
             lost_track_buffer=lost_track_buffer,
-            minimum_matching_threshold=minimum_matching_threshold,
+            matching_cost_threshold=matching_cost_threshold,
             fuse_score=fuse_score,
             gmc_method=gmc_method,
             reid_weights=reid_weights,
@@ -89,7 +89,7 @@ class ObjectCounterApp:
             f"fps={fps:.0f}, "
             f"activation_threshold={track_activation_threshold}, "
             f"lost_track_buffer={lost_track_buffer}, "
-            f"matching_threshold={minimum_matching_threshold}"
+            f"matching_cost_threshold={matching_cost_threshold}"
         )
 
         crossing_lines = self.config.get("counter.crossing_lines", None)

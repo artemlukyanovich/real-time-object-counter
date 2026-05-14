@@ -17,9 +17,9 @@ detector:
 
 tracker:
   algorithm: "bytetrack"
-  track_activation_threshold: 0.25
+  track_activation_threshold: 0.5
   track_low_threshold: 0.1
-  minimum_matching_threshold: 0.8
+  matching_cost_threshold: 0.8
   lost_track_buffer: null
   auto_lost_track_buffer_seconds: 2.0
   fuse_score: true

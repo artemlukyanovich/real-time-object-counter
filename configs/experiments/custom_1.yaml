@@ -2,12 +2,16 @@ video:
   source: 0  # Webcam by default (0=default camera, or path to video file)
   fps: null         # null = read from source; explicit value overrides it
   fallback_fps: 30  # used when fps is null and the source reports 0 or nothing
-  frame_width: 1280
-  frame_height: 720
+#  frame_width: 1280
+#  frame_height: 720
+  frame_width: 960
+  frame_height: 540
+#  frame_width: 640
+#  frame_height: 360
 
 detector:
-  model: "yolov8n.pt"  # nano model for speed
-#  model: "yolov8s.pt"  # компромисс: скорость/точность
+#  model: "yolov8n.pt"  # nano model for speed
+  model: "yolov8s.pt"  # компромисс: скорость/точность
   confidence_threshold: 0.5
   device: "cuda"  # or "cpu"
   allowed_classes: ["person"]  # Use COCO class names, e.g.: ["person"] or ["person", "car", "truck"]
@@ -18,7 +22,7 @@ tracker:
   track_activation_threshold: 0.75
   lost_track_buffer: null
   auto_lost_track_buffer_seconds: 3.0
-  minimum_matching_threshold: 0.975
+  matching_cost_threshold: 0.85
 
 counter:
   enable: true
@@ -38,4 +42,4 @@ display:
   show_detections: true
   show_tracking_ids: true
   show_counts: true
-  font_size: 1.0
+  font_size: 0.75

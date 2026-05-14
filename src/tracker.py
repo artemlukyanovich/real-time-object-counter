@@ -78,7 +78,7 @@ class UltralyticsTracker:
         track_activation_threshold: float = 0.25,
         track_low_threshold: float = 0.1,
         lost_track_buffer: int = 30,
-        minimum_matching_threshold: float = 0.8,
+        matching_cost_threshold: float = 0.8,
         fuse_score: bool = True,
         gmc_method: str = "sparseOptFlow",
         reid_weights: str = "osnet_x0_25_market.pt",
@@ -100,8 +100,11 @@ class UltralyticsTracker:
                 low-confidence detection matching threshold).
             lost_track_buffer: Maps to track_buffer (frames to keep a lost
                 track alive before discarding it).
-            minimum_matching_threshold: Maps to match_thresh (IoU threshold
-                for associating detections to tracks).
+            matching_cost_threshold: Maps to match_thresh (IoU cost threshold
+                for associating detections to tracks). Higher values allow
+                matching detections with lower overlap, keeping the same ID
+                through partial occlusions. Lower values require tighter
+                overlap, causing ID switches when an object is briefly hidden.
             fuse_score: BoT-SORT only. Fuse detection confidence into IoU
                 cost matrix.
             gmc_method: BoT-SORT only. Global Motion Compensation method.
@@ -126,7 +129,7 @@ class UltralyticsTracker:
             track_activation_threshold=track_activation_threshold,
             track_low_threshold=track_low_threshold,
             lost_track_buffer=lost_track_buffer,
-            minimum_matching_threshold=minimum_matching_threshold,
+            matching_cost_threshold=matching_cost_threshold,
             fuse_score=fuse_score,
             gmc_method=gmc_method,
             reid_weights=reid_weights,
@@ -215,7 +218,7 @@ class UltralyticsTracker:
         track_activation_threshold: float,
         track_low_threshold: float,
         lost_track_buffer: int,
-        minimum_matching_threshold: float,
+        matching_cost_threshold: float,
         fuse_score: bool,
         gmc_method: str,
         reid_weights: str,
@@ -231,7 +234,7 @@ class UltralyticsTracker:
             track_activation_threshold → track_high_thresh, new_track_thresh
             track_low_threshold        → track_low_thresh
             lost_track_buffer          → track_buffer
-            minimum_matching_threshold → match_thresh
+            matching_cost_threshold    → match_thresh
             fuse_score                 → fuse_score        (botsort, botsort_reid)
             gmc_method                 → gmc_method        (botsort, botsort_reid)
             proximity_threshold        → proximity_thresh  (botsort, botsort_reid)
@@ -244,7 +247,7 @@ class UltralyticsTracker:
         params["new_track_thresh"] = track_activation_threshold
         params["track_low_thresh"] = track_low_threshold
         params["track_buffer"] = lost_track_buffer
-        params["match_thresh"] = minimum_matching_threshold
+        params["match_thresh"] = matching_cost_threshold
 
         if algorithm in ("botsort", "botsort_reid"):
             params["fuse_score"] = fuse_score

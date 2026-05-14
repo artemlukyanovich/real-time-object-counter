@@ -34,9 +34,9 @@ detector:
 
 tracker:
   algorithm: "bytetrack"
-  track_activation_threshold: 0.25
+  track_activation_threshold: 0.5
   track_low_threshold: 0.1
-  minimum_matching_threshold: 0.8
+  matching_cost_threshold: 0.8
   lost_track_buffer: null
   auto_lost_track_buffer_seconds: 3.0
   fuse_score: true          # BoT-SORT only
@@ -145,7 +145,7 @@ Ultralytics автоматически скачивает веса при пер
 | `algorithm` | str | `"bytetrack"` | Алгоритм трекинга: `"bytetrack"`, `"botsort"` или `"botsort_reid"` |
 | `track_activation_threshold` | float | `0.25` | Минимальная уверенность для активации нового трека |
 | `track_low_threshold` | float | `0.1` | Минимальная уверенность для второго этапа сопоставления (низкоконфидентные детекции) |
-| `minimum_matching_threshold` | float | `0.8` | Порог IoU для сопоставления детекций с треками |
+| `matching_cost_threshold` | float | `0.8` | Порог стоимости IoU для сопоставления детекций с треками |
 | `lost_track_buffer` | int / null | `null` | Кадров до удаления потерянного трека; `null` = авторасчёт |
 | `auto_lost_track_buffer_seconds` | float | `3.0` | Секунды для авторасчёта буфера: `round(fps × seconds)` |
 
@@ -156,7 +156,7 @@ Ultralytics автоматически скачивает веса при пер
 | `track_activation_threshold` | `track_high_thresh`, `new_track_thresh` |
 | `track_low_threshold` | `track_low_thresh` |
 | `lost_track_buffer` | `track_buffer` |
-| `minimum_matching_threshold` | `match_thresh` |
+| `matching_cost_threshold` | `match_thresh` |
 
 **Влияние `track_activation_threshold`:**
 - Малое значение (0.1–0.2): новые треки создаются даже при слабой уверенности → больше ложных треков
@@ -167,9 +167,9 @@ Ultralytics автоматически скачивает веса при пер
 - Большое значение (50–100 кадров): треки сохраняются при длительных окклюзиях → стабильный ID
 - При `null` буфер рассчитывается автоматически: `round(fps × auto_lost_track_buffer_seconds)`
 
-**Влияние `minimum_matching_threshold`:**
-- Высокое значение (0.8+): требуется сильное пересечение bbox → меньше ложных сопоставлений, больше разрывов треков при быстром движении
-- Низкое значение (0.4–0.5): треки сохраняются при большом смещении, но возможны ошибочные сопоставления разных объектов
+**Влияние `matching_cost_threshold`:**
+- Высокое значение (0.8+): принимается сопоставление с низким IoU → объект сохраняет свой ID после кратковременного перекрытия (например, прохода мимо фонарного столба)
+- Низкое значение (0.4–0.5): для сопоставления требуется высокое перекрытие → кратковременная окклюзия приводит к смене ID и созданию нового трека
 
 ### ByteTrack (`algorithm: "bytetrack"`)
 
@@ -309,7 +309,7 @@ tracker:
   algorithm: "bytetrack"
   track_activation_threshold: 0.3
   auto_lost_track_buffer_seconds: 5.0
-  minimum_matching_threshold: 0.7
+  matching_cost_threshold: 0.7
 ```
 
 ### Движущаяся камера (дрон / PTZ)
@@ -318,7 +318,7 @@ tracker:
   algorithm: "botsort"
   track_activation_threshold: 0.4
   auto_lost_track_buffer_seconds: 4.0
-  minimum_matching_threshold: 0.7
+  matching_cost_threshold: 0.7
 ```
 BoT-SORT с GMC (`sparseOptFlow`) компенсирует смещение кадра и снижает количество потерянных треков при движении камеры.
 
@@ -328,7 +328,7 @@ tracker:
   algorithm: "botsort_reid"
   track_activation_threshold: 0.4
   auto_lost_track_buffer_seconds: 5.0
-  minimum_matching_threshold: 0.7
+  matching_cost_threshold: 0.7
 ```
 BoT-SORT с Re-ID восстанавливает ID объекта по внешнему виду даже после длительного отсутствия в кадре. ReID-модель скачается автоматически (`osnet_x0_25_market.pt`).
 
