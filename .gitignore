@@ -37,8 +37,6 @@ env/
 Thumbs.db
 
 # Project specific
-data/input/
-outputs/
 *.log
 .cache/
 .runtime/
@@ -46,6 +44,22 @@ models/
 *.mp4
 *.avi
 *.mov
-/data/raw_videos/
-/data/frames/
-/data/labels/
+
+# Ignore contents but keep directory structure via .gitkeep
+data/input/**
+!data/input/.gitkeep
+
+outputs/**
+!outputs/.gitkeep
+
+/data/raw_videos/**
+!/data/raw_videos/.gitkeep
+
+/data/frames/**
+!/data/frames/.gitkeep
+
+/data/labels/**
+!/data/labels/.gitkeep
+
+/data/bootstrap_export/**
+!/data/bootstrap_export/.gitkeep
