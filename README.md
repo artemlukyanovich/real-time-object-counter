@@ -17,9 +17,24 @@ Python, PyTorch, OpenCV, YOLO, ByteTrack.
 GIF/video/screenshot
 
 ## How to run
+
+### Main counter app
+
+```bash
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
 pip install -r requirements.txt
 python -m src.main --source 0
+```
+
+### Annotation tools (separate env)
+
+```bash
+# Label Studio or labelImg (in annotations environment)
+pip install -r requirements-annotations.txt
+label-studio   # or labelImg
+```
+
+See `docs/how_to_run.md` for detailed setup.
 
 ## Results
 - FPS: ...

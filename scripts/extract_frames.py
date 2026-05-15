@@ -14,8 +14,13 @@ def extract_frames(video_path: Path, output_dir: Path, step: int, dry_run: bool 
     if not dry_run:
         output_dir.mkdir(parents=True, exist_ok=True)
 
+    existing = list(output_dir.glob("frame_*.jpg")) if output_dir.exists() else []
+    start_index = max(
+        (int(p.stem.split("_")[1]) for p in existing), default=0
+    )
+
     total_frames = 0
-    saved_frames = 0
+    saved_frames = start_index
 
     while True:
         ok, frame = cap.read()

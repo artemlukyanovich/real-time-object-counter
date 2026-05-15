@@ -80,10 +80,26 @@ VideoSource → UltralyticsTracker → Counter → Renderer → Display
 Извлекает каждый N-й кадр из видеофайла и сохраняет как JPG. Используется для подготовки датасетов и отладки.
 
 ```bash
-python scripts/extract_frames.py data/raw_videos/clip.mp4 data/frames/clip --step 15
+python -m scripts.extract_frames data/raw_videos/clip.mp4 data/frames/clip --step 15
 ```
 
 Подробнее — в `docs/extract_frames.md`.
+
+### Инструменты аннотирования (отдельная среда `annotations`)
+
+**Label Studio** — веб-интерфейс для централизованного управления проектом аннотирования:
+```bash
+conda activate annotations
+label-studio
+```
+
+**labelImg** — GUI для быстрого аннотирования изображений в формате YOLO/Pascal VOC:
+```bash
+conda activate annotations
+labelImg
+```
+
+Требуют отдельного окружения из-за конфликтов зависимостей. Инструкции по установке — в `docs/how_to_run.md`.
 
 ---
 

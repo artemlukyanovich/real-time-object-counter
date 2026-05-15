@@ -48,3 +48,4 @@ models/
 *.mov
 /data/raw_videos/
 /data/frames/
+/data/labels/

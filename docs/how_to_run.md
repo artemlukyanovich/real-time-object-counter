@@ -4,7 +4,9 @@
 
 ## Установка
 
-### Conda (рекомендуется)
+### Основная среда (object-counter)
+
+#### Conda (рекомендуется)
 
 ```bash
 conda create -n object-counter python=3.10
@@ -12,7 +14,7 @@ conda activate object-counter
 pip install -r requirements.txt
 ```
 
-### pip (без conda)
+#### pip (без conda)
 
 ```bash
 python -m venv .venv
@@ -22,6 +24,28 @@ source .venv/bin/activate   # Linux/macOS
 pip install -r requirements.txt
 ```
 
+### Отдельная среда для аннотирования (annotations)
+
+Label Studio и labelImg требуют отдельного окружения из-за конфликтов зависимостей.
+
+#### Conda
+
+```bash
+conda create -n annotations python=3.10
+conda activate annotations
+pip install -r requirements-annotations.txt
+```
+
+#### pip
+
+```bash
+python -m venv .venv-annotations
+source .venv-annotations/bin/activate   # Linux/macOS
+# .venv-annotations\Scripts\activate    # Windows
+
+pip install -r requirements-annotations.txt
+```
+
 **Основные зависимости:**
 - `ultralytics` — YOLOv8 + автоматическая загрузка весов
 - `opencv-python` — захват видео и отрисовка
@@ -29,6 +53,30 @@ pip install -r requirements.txt
 - `pyyaml` — парсинг конфигурации
 
 При первом запуске `yolov8n.pt` скачивается автоматически (~6 МБ). Либо положить файл в корень проекта вручную.
+
+---
+
+## Аннотирование (Label Studio + labelImg)
+
+После установки в окружении `annotations`:
+
+### Label Studio
+
+```bash
+conda activate annotations  # или source .venv-annotations/bin/activate
+label-studio
+```
+
+Откроется веб-интерфейс на `http://localhost:8080`. Используется для централизованного управления проектом аннотирования.
+
+### labelImg
+
+```bash
+conda activate annotations
+labelImg
+```
+
+Открывается GUI для быстрого аннотирования отдельных изображений. Используется для создания YOLO-формата датасетов.
 
 ---
 
