@@ -5,7 +5,7 @@
 ## Использование
 
 ```bash
-python -m scripts.extract_frames <video> <output> [--step N]
+python -m scripts.extract_frames <video> <output> [--step N] [--prefix STR]
 ```
 
 ### Аргументы
@@ -15,6 +15,7 @@ python -m scripts.extract_frames <video> <output> [--step N]
 | `video` | path | Путь к видеофайлу |
 | `output` | path | Папка для сохранения кадров (создаётся автоматически) |
 | `--step` | int | Каждый N-й кадр (по умолчанию: `15`) |
+| `--prefix` | str | Префикс имени файла (по умолчанию: `frame`) |
 | `--dry-run` | flag | Предпросмотр: показать количество кадров без сохранения |
 
 ## Примеры
@@ -26,8 +27,9 @@ python -m scripts.extract_frames data/raw_videos/clip.mp4 data/frames/clip
 # Каждый 30-й кадр
 python -m scripts.extract_frames data/raw_videos/clip.mp4 data/frames/clip --step 30
 
-# Каждый кадр
-python -m scripts.extract_frames data/raw_videos/clip.mp4 data/frames/clip --step 1
+# С пользовательским префиксом
+python -m scripts.extract_frames data/raw_videos/arx_1.mp4 data/frames/arx --step 30 --prefix arx
+python -m scripts.extract_frames data/raw_videos/arx_2.mp4 data/frames/arx --step 30 --prefix arx
 
 # Предпросмотр (без сохранения файлов)
 python -m scripts.extract_frames data/raw_videos/clip.mp4 data/frames/clip --step 15 --dry-run
@@ -49,7 +51,11 @@ Would save: 100 frames → data/frames/clip
 
 ## Именование файлов
 
-Кадры сохраняются в формате `frame_0001.jpg`, `frame_0002.jpg`, ... — порядковый номер сохранённого кадра (не номер кадра в исходном видео).
+Кадры сохраняются в формате `{prefix}_{номер}.jpg`, например:
+- `frame_0001.jpg`, `frame_0002.jpg`, ... (по умолчанию)
+- `arx1_0001.jpg`, `arx2_0001.jpg`, ... (с пользовательским префиксом)
+
+Нумерация продолжается с последнего существующего файла с тем же префиксом, что позволяет обрабатывать несколько видео в одну папку без перезаписи.
 
 ## Структура данных
 
@@ -60,5 +66,9 @@ data/
     clip_name/    ← кадры конкретного видео
       frame_0001.jpg
       frame_0002.jpg
+      ...
+    mixed/        ← кадры из нескольких видео с разными префиксами
+      arx1_0001.jpg
+      arx2_0001.jpg
       ...
 ```

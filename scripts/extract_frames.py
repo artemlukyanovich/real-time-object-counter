@@ -6,7 +6,13 @@ from pathlib import Path
 import cv2
 
 
-def extract_frames(video_path: Path, output_dir: Path, step: int, dry_run: bool = False) -> None:
+def extract_frames(
+    video_path: Path,
+    output_dir: Path,
+    step: int,
+    prefix: str = "frame",
+    dry_run: bool = False,
+) -> None:
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         raise RuntimeError(f"Cannot open video: {video_path}")
@@ -14,9 +20,9 @@ def extract_frames(video_path: Path, output_dir: Path, step: int, dry_run: bool 
     if not dry_run:
         output_dir.mkdir(parents=True, exist_ok=True)
 
-    existing = list(output_dir.glob("frame_*.jpg")) if output_dir.exists() else []
+    existing = list(output_dir.glob(f"{prefix}_*.jpg")) if output_dir.exists() else []
     start_index = max(
-        (int(p.stem.split("_")[1]) for p in existing), default=0
+        (int(p.stem.split("_")[-1]) for p in existing), default=0
     )
 
     total_frames = 0
@@ -30,7 +36,7 @@ def extract_frames(video_path: Path, output_dir: Path, step: int, dry_run: bool 
         if total_frames % step == 0:
             saved_frames += 1
             if not dry_run:
-                filename = output_dir / f"frame_{saved_frames:04d}.jpg"
+                filename = output_dir / f"{prefix}_{saved_frames:04d}.jpg"
                 cv2.imwrite(str(filename), frame)
 
         total_frames += 1
@@ -39,10 +45,10 @@ def extract_frames(video_path: Path, output_dir: Path, step: int, dry_run: bool 
 
     if dry_run:
         print(f"Dry run   : {total_frames} frames in video, step={step}")
-        print(f"Would save: {saved_frames} frames → {output_dir}")
+        print(f"Would save: {saved_frames - start_index} frames → {output_dir}")
     else:
         print(f"Processed : {total_frames} frames")
-        print(f"Saved     : {saved_frames} frames → {output_dir}")
+        print(f"Saved     : {saved_frames - start_index} frames → {output_dir}")
 
 
 def parse_args() -> argparse.Namespace:
@@ -64,6 +70,12 @@ def parse_args() -> argparse.Namespace:
         help="Save every N-th frame (default: 15)",
     )
     parser.add_argument(
+        "--prefix",
+        type=str,
+        default="frame",
+        help="Filename prefix for saved frames (default: 'frame')",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Preview only: show how many frames would be saved without writing files",
@@ -73,4 +85,4 @@ def parse_args() -> argparse.Namespace:
 
 if __name__ == "__main__":
     args = parse_args()
-    extract_frames(args.video, args.output, args.step, dry_run=args.dry_run)
+    extract_frames(args.video, args.output, args.step, prefix=args.prefix, dry_run=args.dry_run)
