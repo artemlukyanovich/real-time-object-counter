@@ -134,7 +134,7 @@ python -m src.main --config configs/default.yaml --source path/to/video.mp4
 
 ```yaml
 detector:
-  model: "yolov8n.pt"          # Сменить на yolov8s.pt для большей точности
+  model: "models/yolov8n.pt"          # Сменить на yolov8s.pt для большей точности
   confidence_threshold: 0.5
   device: "cuda"               # "cpu" если нет GPU
 

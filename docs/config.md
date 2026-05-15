@@ -27,7 +27,7 @@ video:
   frame_height: 720
 
 detector:
-  model: "yolov8n.pt"
+  model: "models/yolov8n.pt"
   confidence_threshold: 0.5
   device: "cuda"
   allowed_classes: null
@@ -285,7 +285,7 @@ video:
   frame_width: 640
   frame_height: 480
 detector:
-  model: "yolov8n.pt"
+  model: "models/yolov8n.pt"
   confidence_threshold: 0.5
   device: "cpu"
 tracker:
@@ -302,7 +302,7 @@ video:
   frame_width: 1920
   frame_height: 1080
 detector:
-  model: "yolov8s.pt"
+  model: "models/yolov8s.pt"
   confidence_threshold: 0.4
   device: "cuda"
 tracker:

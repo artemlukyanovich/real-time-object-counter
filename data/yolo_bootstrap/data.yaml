@@ -1,8 +1,0 @@
-path: /home/artem/Programming/projects/ai_drones/project_1/real-time-object-counter/data/yolo_bootstrap
-train: images/train
-val: images/val
-nc: 3
-names:
-- arx
-- taar
-- the_institute

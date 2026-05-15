@@ -6,7 +6,7 @@ video:
   frame_height: 720
 
 detector:
-  model: "yolov8n.pt"  # nano model for speed
+  model: "models/yolov8n.pt"  # nano model for speed
   confidence_threshold: 0.5
   device: "cuda"  # or "cpu"
   # Filter detections to specific classes only. null = detect all classes.
