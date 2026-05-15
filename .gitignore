@@ -63,3 +63,21 @@ outputs/**
 
 /data/bootstrap_export/**
 !/data/bootstrap_export/.gitkeep
+
+/data/yolo_bootstrap/images/train/**
+!/data/yolo_bootstrap/images/train/.gitkeep
+
+/data/yolo_bootstrap/images/val/**
+!/data/yolo_bootstrap/images/val/.gitkeep
+
+/data/yolo_bootstrap/labels/train/**
+!/data/yolo_bootstrap/labels/train/.gitkeep
+
+/data/yolo_bootstrap/labels/val/**
+!/data/yolo_bootstrap/labels/val/.gitkeep
+
+/runs/**
+!/runs/.gitkeep
+
+/custom_models/**
+!/custom_models/.gitkeep
