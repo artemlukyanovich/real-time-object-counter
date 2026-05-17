@@ -50,6 +50,34 @@ data/input/**
 
 outputs/**
 !outputs/.gitkeep
+!outputs/benchmarks
+!outputs/crops
+!outputs/embeddings
+!outputs/label_review
+!outputs/reid
+!outputs/screenshots
+!outputs/videos
+
+outputs/benchmarks/**
+!outputs/benchmarks/.gitkeep
+
+outputs/crops/**
+!outputs/crops/.gitkeep
+
+outputs/embeddings/**
+!outputs/embeddings/.gitkeep
+
+outputs/label_review/**
+!outputs/label_review/.gitkeep
+
+outputs/reid/**
+!outputs/reid/.gitkeep
+
+outputs/screenshots/**
+!outputs/screenshots/.gitkeep
+
+outputs/videos/**
+!outputs/videos/.gitkeep
 
 /data/raw_videos/**
 !/data/raw_videos/.gitkeep
@@ -74,9 +102,10 @@ outputs/**
 
 /models/**
 !/models/.gitkeep
+!/models/embeddings/
 
-/custom_models/**
-!/custom_models/.gitkeep
+/models/embeddings/**
+!/models/embeddings/.gitkeep
 
 /custom_models/**
 !/custom_models/.gitkeep
