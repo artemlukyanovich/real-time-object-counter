@@ -71,8 +71,12 @@ class ReIDManager:
         result: Dict[int, int] = {}
 
         for track_id, (bbox, class_name) in tracked_objects.items():
+            # Pass the already-known object_id (if any) so saved crop filenames
+            # include the persistent ID even before the if/else resolution below.
+            known_object_id = self._track_to_object.get(track_id)
             crop = self.cropper.crop(
-                frame, bbox, track_id=track_id, frame_idx=frame_idx
+                frame, bbox, track_id=track_id, frame_idx=frame_idx,
+                object_id=known_object_id,
             )
             if crop.size == 0:
                 continue

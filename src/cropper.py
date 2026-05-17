@@ -32,6 +32,7 @@ class ObjectCropper:
         bbox: BBox,
         track_id: Optional[int] = None,
         frame_idx: Optional[int] = None,
+        object_id: Optional[int] = None,
     ) -> np.ndarray:
         """Extract a crop from frame given a bounding box.
 
@@ -40,6 +41,10 @@ class ObjectCropper:
             bbox: (x1, y1, x2, y2) in pixel coordinates.
             track_id: Optional track ID used for naming saved crops.
             frame_idx: Optional frame index used for naming saved crops.
+            object_id: Optional persistent object ID (from ReIDManager). When
+                provided, appended to the filename as ``_obj{object_id}`` so
+                that crops from different track_ids that belong to the same
+                physical object share a visible identifier.
 
         Returns:
             Cropped BGR image as numpy array. Empty array if bbox is invalid.
@@ -58,7 +63,7 @@ class ObjectCropper:
         crop = frame[y1:y2, x1:x2].copy()
 
         if self.save_crops and crop.size > 0:
-            self._save_crop(crop, track_id, frame_idx)
+            self._save_crop(crop, track_id, frame_idx, object_id)
 
         return crop
 
@@ -90,9 +95,11 @@ class ObjectCropper:
         crop: np.ndarray,
         track_id: Optional[int],
         frame_idx: Optional[int],
+        object_id: Optional[int] = None,
     ) -> None:
         frame_prefix = f"frame{frame_idx:06d}_" if frame_idx is not None else ""
         id_suffix = f"id{track_id}" if track_id is not None else f"{self._save_counter:06d}"
-        filename = self.output_dir / f"{frame_prefix}{id_suffix}.jpg"
+        obj_suffix = f"_obj{object_id}" if object_id is not None else ""
+        filename = self.output_dir / f"{frame_prefix}{id_suffix}{obj_suffix}.jpg"
         cv2.imwrite(str(filename), crop)
         self._save_counter += 1
