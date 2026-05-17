@@ -37,8 +37,13 @@ Python, PyTorch, OpenCV, YOLO, ByteTrack.
 
 See `docs/dataset_preparation.md` for dataset preparation and training details.
 
-## Demo
-GIF/video/screenshot
+## Demo & Workflow
+
+See the [Google Drive folder](https://drive.google.com/drive/folders/1quACHaNNk9WtV1Zl8V0zwyvrnIoeJjDI?usp=sharing) for demos and workflow examples:
+- People Tracking Demo
+- Custom Object Tracking Demo
+- Auto-label Review Demo
+- Label Studio Annotation Example
 
 ## How to run
 
@@ -55,12 +60,7 @@ python -m src.main --source 0
 ```bash
 # Label Studio or labelImg (in annotations environment)
 pip install -r requirements-annotations.txt
-label-studio   # or labelImg
+label-studio
 ```
 
 See `docs/how_to_run.md` for detailed setup.
-
-## Results
-- FPS: ...
-- GPU: RTX 3050 Ti
-- Model: YOLOv8n / YOLO11n
