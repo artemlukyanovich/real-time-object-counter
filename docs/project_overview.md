@@ -73,24 +73,69 @@ VideoSource → UltralyticsTracker → Counter → Renderer → Display
 
 ---
 
-## Утилиты
+## Утилиты и скрипты
 
 ### extract_frames — `scripts/extract_frames.py`
 
-Извлекает каждый N-й кадр из видеофайла и сохраняет как JPG. Используется для подготовки датасетов и отладки.
+Извлекает каждый N-й кадр из видеофайла и сохраняет как JPG. Поддерживает batch-обработку нескольких видео в одну директорию с продолжением нумерации. Используется для подготовки датасетов.
 
 ```bash
-python -m scripts.extract_frames data/raw_videos/clip.mp4 data/frames/clip --step 15
+python -m scripts.extract_frames data/raw_videos/clip.mp4 data/frames/clip --step 30
+python -m scripts.extract_frames data/raw_videos/clip.mp4 data/frames/clip --step 15 --dry-run
 ```
 
 Подробнее — в `docs/extract_frames.md`.
+
+### cors_http_server — `scripts/cors_http_server.py`
+
+Поднимает локальный HTTP-сервер (порт 9000) с CORS-заголовками для доступа Label Studio к изображениям из файловой системы.
+
+```bash
+python -m scripts.cors_http_server
+```
+
+### convert_yolo_predictions_to_label_studio — `scripts/convert_yolo_predictions_to_label_studio.py`
+
+Конвертирует предсказания YOLO (`.txt` файлы в формате `class cx cy w h`) в JSON-формат Label Studio для импорта и ревью разметки.
+
+```bash
+python -m scripts.convert_yolo_predictions_to_label_studio \
+  data/frames/all \
+  custom_models/bootstrap_predictions/run/labels \
+  outputs/predictions_all.json
+```
+
+### review_yolo_labels — `scripts/review_yolo_labels.py`
+
+Интерактивный просмотрщик разметки на базе OpenCV. Позволяет быстро просмотреть изображения с YOLO bbox и принять решение по каждому: одобрить, удалить разметку или отметить для ручной проверки. Логирует результаты в CSV.
+
+```bash
+python -m scripts.review_yolo_labels \
+  data/frames/all \
+  custom_models/bootstrap_predictions/run/labels \
+  --output-review-dir outputs/label_review \
+  --dry-run
+```
+
+Клавиши: `n`/`p` — следующий/предыдущий, `k` — OK, `d` — удалить разметку, `m` — отметить для ревью, `q` — выход.
+
+### split_yolo_dataset — `scripts/split_yolo_dataset.py`
+
+Разделяет экспорт из Label Studio на тренировочный и валидационный наборы в формате YOLO. Генерирует `data.yaml` для запуска `yolo detect train`.
+
+```bash
+python -m scripts.split_yolo_dataset \
+  data/bootstrap_export/project-export-dir \
+  data/yolo_output/project-output-dir \
+  --val-ratio 0.2
+```
 
 ### Инструменты аннотирования (отдельная среда `annotations`)
 
 **Label Studio** — веб-интерфейс для централизованного управления проектом аннотирования:
 ```bash
 conda activate annotations
-label-studio
+LABEL_STUDIO_LOCAL_FILES_SERVING_ENABLED=true label-studio
 ```
 
 **labelImg** — GUI для быстрого аннотирования изображений в формате YOLO/Pascal VOC:
@@ -100,6 +145,8 @@ labelImg
 ```
 
 Требуют отдельного окружения из-за конфликтов зависимостей. Инструкции по установке — в `docs/how_to_run.md`.
+
+Полный workflow подготовки датасета и обучения модели — в `docs/dataset_preparation.md`.
 
 ---
 

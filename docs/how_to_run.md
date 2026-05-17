@@ -64,10 +64,17 @@ pip install -r requirements-annotations.txt
 
 ```bash
 conda activate annotations  # или source .venv-annotations/bin/activate
+LABEL_STUDIO_LOCAL_FILES_SERVING_ENABLED=true \
 label-studio
 ```
 
-Откроется веб-интерфейс на `http://localhost:8080`. Используется для централизованного управления проектом аннотирования.
+Откроется веб-интерфейс на `http://localhost:8080`. Для доступа к локальным изображениям из браузера также запустить в отдельном терминале:
+
+```bash
+python -m scripts.cors_http_server
+```
+
+Сервер доступен на `http://localhost:9000`.
 
 ### labelImg
 
@@ -145,6 +152,25 @@ display:
 ```
 
 Подробно — в `docs/config.md`.
+
+---
+
+## Запуск с кастомной моделью
+
+Обученная на кастомных данных модель указывается в конфиге:
+
+```yaml
+detector:
+  model: "custom_models/final/custom_final_1/weights/best.pt"
+  allowed_classes: ["arx", "taar", "the_institute"]
+```
+
+```bash
+python -m src.main --config configs/experiments/custom_objects.yaml
+python -m src.main --source data/input/video.mp4 --config configs/experiments/custom_objects.yaml
+```
+
+Подготовка датасета и обучение модели описаны в `docs/dataset_preparation.md`.
 
 ---
 
