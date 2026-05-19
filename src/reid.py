@@ -70,9 +70,13 @@ class ReIDManager:
 
         result: Dict[int, int] = {}
 
-        for track_id, (bbox, class_name) in tracked_objects.items():
-            # Pass the already-known object_id (if any) so saved crop filenames
-            # include the persistent ID even before the if/else resolution below.
+        # ── 1. Crop all tracked objects ──────────────────────────────────
+        track_ids = list(tracked_objects.keys())
+        crops = []
+        valid_track_ids = []
+
+        for track_id in track_ids:
+            bbox, class_name = tracked_objects[track_id]
             known_object_id = self._track_to_object.get(track_id)
             crop = self.cropper.crop(
                 frame, bbox, track_id=track_id, frame_idx=frame_idx,
@@ -80,23 +84,34 @@ class ReIDManager:
             )
             if crop.size == 0:
                 continue
+            crops.append(crop)
+            valid_track_ids.append(track_id)
 
-            embedding = self.embedder.embed(crop)
+        if not crops:
+            # Clean up stale mappings
+            active_track_ids = set(tracked_objects.keys())
+            for tid in [t for t in self._track_to_object if t not in active_track_ids]:
+                del self._track_to_object[tid]
+            return result
+
+        # ── 2. Embed all crops in a single batch pass ────────────────────
+        embeddings = self.embedder.embed_batch(crops)  # (N, dim)
+
+        # ── 3. Resolve object identities ────────────────────────────────
+        for i, track_id in enumerate(valid_track_ids):
+            bbox, class_name = tracked_objects[track_id]
+            embedding = embeddings[i]
 
             if track_id in self._track_to_object:
-                # This track is already linked to a known object — just update.
                 object_id = self._track_to_object[track_id]
                 self.memory.update(object_id, bbox, embedding, track_id, frame_idx)
             else:
-                # New tracker ID — try to match against memory (re-identification).
                 matched_id, _score = self.memory.find_match(embedding, frame_idx)
 
                 if matched_id is not None:
-                    # Re-identified: link this tracker ID to the existing object.
                     object_id = matched_id
                     self.memory.update(object_id, bbox, embedding, track_id, frame_idx)
                 else:
-                    # No match — register as a new object.
                     object_id = self.memory.add(
                         class_name, bbox, embedding, track_id, frame_idx
                     )

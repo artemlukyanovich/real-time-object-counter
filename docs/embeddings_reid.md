@@ -225,6 +225,7 @@ ReID-pipeline **полностью интегрирован** в `ObjectCounterA
 reid:
   enabled: true
   embeddings_config: "configs/embeddings/default.yaml"  # параметры модели и памяти
+  update_interval: 3
 ```
 
 Параметры модели, cropper'а и памяти берутся из `configs/embeddings/default.yaml` — подбор порогов и устройства производится там.

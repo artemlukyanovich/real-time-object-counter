@@ -94,6 +94,11 @@ reid:
   # Path to the embeddings/ReID configuration file.
   embeddings_config: "configs/embeddings/default.yaml"
 
+  # Run the embedding pipeline every N frames (1 = every frame).
+  # At 30 FPS, update_interval: 3 means ~10 embedding passes/sec — enough for
+  # stable re-id while reducing GPU/CPU load significantly.
+  update_interval: 3
+
 output:
   save_video: false
   output_dir: "outputs"

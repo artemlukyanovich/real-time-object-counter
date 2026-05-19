@@ -133,11 +133,13 @@ class ObjectCounterApp:
             ),
         )
         self.reid_manager = ReIDManager(cropper, embedder, memory)
+        self._reid_interval = self.config.get("reid.update_interval", 1)
 
         print(
             f"ReID: enabled | model={emb_cfg.get('embedder.model_name', 'ViT-B-32')} "
             f"device={emb_cfg.get('embedder.device', 'cpu')} "
-            f"threshold={emb_cfg.get('memory.similarity_threshold', 0.75)}"
+            f"threshold={emb_cfg.get('memory.similarity_threshold', 0.75)} "
+            f"update_interval={self._reid_interval}"
         )
 
     def _resolve_lost_track_buffer(self, fps: float) -> int:
@@ -194,9 +196,17 @@ class ObjectCounterApp:
 
                 track_to_object_id: Dict[int, int] = {}
                 if self.reid_manager is not None:
-                    track_to_object_id = self.reid_manager.update(
-                        frame, tracked_objects, frame_idx
-                    )
+                    if frame_idx % self._reid_interval == 0:
+                        track_to_object_id = self.reid_manager.update(
+                            frame, tracked_objects, frame_idx
+                        )
+                    else:
+                        # Reuse last-known object IDs for the current tracks
+                        track_to_object_id = {
+                            tid: self.reid_manager.get_object_id(tid)
+                            for tid in tracked_objects
+                            if self.reid_manager.get_object_id(tid) is not None
+                        }
 
                 counts = self.counter.update(tracked_objects)
 

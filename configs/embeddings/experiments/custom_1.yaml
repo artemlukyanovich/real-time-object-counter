@@ -1,0 +1,47 @@
+# Embedding / ReID configuration
+
+embedder:
+  # OpenCLIP model name.
+  # Other options: "ViT-L-14", "ViT-H-14" (larger, slower, more accurate)
+  model_name: "ViT-B-32"
+
+  # OpenCLIP pretrained weights tag.
+  # See: https://github.com/mlfoundations/open_clip#pretrained-model-interface
+  pretrained: "laion2b_s34b_b79k"
+
+  # Inference device: "cuda" or "cpu".
+  # Falls back to CPU automatically if CUDA is not available.
+  device: "cuda"
+
+  # L2-normalise embeddings so cosine similarity == dot product.
+  normalize: true
+
+cropper:
+  # Extra pixels to add on each side of the bounding box before cropping.
+  padding: 8
+
+  # Save crop images to outputs/crops/ for inspection.
+  save_crops: false
+
+  output_dir: "outputs/crops"
+
+memory:
+  # Cosine similarity score required to accept a re-identification match.
+  # Range [0.0, 1.0]. Higher = stricter matching.
+  similarity_threshold: 0.75
+
+  # Frames without a detection before an object is deactivated.
+  # At 30 FPS, 90 frames == 3 seconds.
+  max_missing_frames: 90
+
+  # Maximum number of past embeddings to keep per object (rolling average).
+  max_embeddings_per_object: 5
+
+output:
+  # Save generated embeddings to outputs/embeddings/ (.npy per object).
+  save_embeddings: false
+  embeddings_dir: "outputs/embeddings"
+
+  # Save re-identification results (JSON log of object identity events).
+  save_reid_log: false
+  reid_dir: "outputs/reid"
