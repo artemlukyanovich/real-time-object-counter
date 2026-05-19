@@ -215,36 +215,76 @@ memory:
 
 ## Интеграция в основной pipeline (`src/main.py`)
 
-Новые модули **не встроены** в основной цикл по умолчанию — они готовы к подключению.
-Минимальный пример интеграции в `ObjectCounterApp._initialize_components()`:
+ReID-pipeline **полностью интегрирован** в `ObjectCounterApp` и включается одной строкой в конфиге.
 
-```python
-from src.cropper import ObjectCropper
-from src.embedder import ObjectEmbedder
-from src.object_memory import ObjectMemory
-from src.reid import ReIDManager
+### Включение
 
-# В _initialize_components():
-self.cropper = ObjectCropper(padding=8)
-self.embedder = ObjectEmbedder(device=self.config.get("detector.device", "cpu"))
-self.memory = ObjectMemory(
-    similarity_threshold=0.75,
-    max_missing_frames=90,
-)
-self.reid_manager = ReIDManager(self.cropper, self.embedder, self.memory)
+В `configs/default.yaml` установите:
+
+```yaml
+reid:
+  enabled: true
+  embeddings_config: "configs/embeddings/default.yaml"  # параметры модели и памяти
 ```
 
-И в `run()`, после `tracker.update()`:
+Параметры модели, cropper'а и памяти берутся из `configs/embeddings/default.yaml` — подбор порогов и устройства производится там.
 
-```python
-detections, tracked_objects = self.tracker.update(frame)
+### Что происходит при запуске
 
-# Новая строка:
-track_to_object_id = self.reid_manager.update(frame, tracked_objects, frame_idx)
+При `reid.enabled: true` приложение:
+
+1. Загружает `configs/embeddings/default.yaml` и инициализирует `ObjectCropper`, `ObjectEmbedder`, `ObjectMemory` и `ReIDManager` (`_initialize_reid()`).
+2. В каждом кадре после `tracker.update()` вызывает `reid_manager.update(frame, tracked_objects, frame_idx)`, получая `Dict[track_id, object_id]`.
+3. Передаёт маппинг в `FrameRenderer` для отображения.
+
+### Визуальная оценка
+
+Включите соответствующие опции в `configs/default.yaml`:
+
+```yaml
+display:
+  show_object_ids: true   # показывать OBJ ID вместо track_id на bounding box
+  show_reid_stats: true   # панель "ReID unique / active" в правом верхнем углу
 ```
 
-`track_to_object_id` содержит `Dict[track_id, object_id]` — его можно передавать в renderer
-для отображения постоянных ID вместо временных трекерных.
+**Формат метки на bounding box:**
+
+```
+#N class [tM]
+```
+
+- `#N` — постоянный `object_id` (не меняется при потере и повторном обнаружении объекта)
+- `class` — класс объекта
+- `[tM]` — текущий временный `track_id` трекера
+
+**Цвет bounding box** определяется по `object_id`, а не по `track_id`: один и тот же физический объект всегда выделен одним цветом, даже если трекер сменил ему `track_id`.
+
+**Панель ReID stats** (правый верхний угол, под FPS):
+
+```
+ReID unique: 5
+ReID active: 3
+```
+
+- `unique` — суммарное количество уникальных объектов за сессию
+- `active` — объекты, активные в данный момент (не истёкшие по `max_missing_frames`)
+
+### Как читать визуализацию
+
+| Что видно на экране | Интерпретация |
+|---|---|
+| Цвет bounding box не меняется при кратковременном исчезновении | ReID корректно переопределил объект |
+| `#N` остаётся прежним при смене `tM` | Успешный re-id: новый track_id сопоставлен со старым object_id |
+| `unique` растёт быстрее реального числа объектов | threshold слишком высокий — объекты не узнаются |
+| `unique` меньше реального числа объектов | threshold слишком низкий — разные объекты сливаются в один |
+
+### Пример вывода при запуске с ReID
+
+```
+Tracker: bytetrack (Ultralytics) | fps=30, activation_threshold=0.5, ...
+ReID: enabled | model=ViT-B-32 device=cpu threshold=0.75
+Starting object counter. Press 'q' to exit.
+```
 
 ---
 

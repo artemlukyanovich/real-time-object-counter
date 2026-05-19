@@ -11,7 +11,7 @@ embedder:
 
   # Inference device: "cuda" or "cpu".
   # Falls back to CPU automatically if CUDA is not available.
-  device: "cpu"
+  device: "cuda"
 
   # L2-normalise embeddings so cosine similarity == dot product.
   normalize: true

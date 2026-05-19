@@ -2,7 +2,7 @@
 
 import argparse
 import time
-from typing import Optional, Union
+from typing import Dict, Optional, Union
 
 import cv2
 
@@ -32,6 +32,7 @@ class ObjectCounterApp:
         self.counter = None
         self.metrics = None
         self.renderer = None
+        self.reid_manager = None
 
         self._initialize_components()
 
@@ -99,6 +100,46 @@ class ObjectCounterApp:
         font_size = self.config.get("display.font_size", 1.0)
         self.renderer = FrameRenderer(font_size)
 
+        if self.config.get("reid.enabled", False):
+            self._initialize_reid()
+
+    def _initialize_reid(self) -> None:
+        from src.cropper import ObjectCropper
+        from src.embedder import ObjectEmbedder
+        from src.object_memory import ObjectMemory
+        from src.reid import ReIDManager
+
+        emb_cfg_path = self.config.get(
+            "reid.embeddings_config", "configs/embeddings/default.yaml"
+        )
+        emb_cfg = Config(emb_cfg_path)
+
+        cropper = ObjectCropper(
+            padding=emb_cfg.get("cropper.padding", 8),
+            save_crops=emb_cfg.get("cropper.save_crops", False),
+            output_dir=emb_cfg.get("cropper.output_dir", "outputs/crops"),
+        )
+        embedder = ObjectEmbedder(
+            model_name=emb_cfg.get("embedder.model_name", "ViT-B-32"),
+            pretrained=emb_cfg.get("embedder.pretrained", "laion2b_s34b_b79k"),
+            device=emb_cfg.get("embedder.device", "cpu"),
+            normalize=emb_cfg.get("embedder.normalize", True),
+        )
+        memory = ObjectMemory(
+            similarity_threshold=emb_cfg.get("memory.similarity_threshold", 0.75),
+            max_missing_frames=emb_cfg.get("memory.max_missing_frames", 90),
+            max_embeddings_per_object=emb_cfg.get(
+                "memory.max_embeddings_per_object", 5
+            ),
+        )
+        self.reid_manager = ReIDManager(cropper, embedder, memory)
+
+        print(
+            f"ReID: enabled | model={emb_cfg.get('embedder.model_name', 'ViT-B-32')} "
+            f"device={emb_cfg.get('embedder.device', 'cpu')} "
+            f"threshold={emb_cfg.get('memory.similarity_threshold', 0.75)}"
+        )
+
     def _resolve_lost_track_buffer(self, fps: float) -> int:
         """Resolve lost_track_buffer from config.
 
@@ -134,6 +175,8 @@ class ObjectCounterApp:
         print("Starting object counter. Press 'q' to exit.")
         print(f"Device: {self.config.get('detector.device', 'Not specified')}")
 
+        frame_idx = 0
+
         try:
             while True:
                 frame_start = time.perf_counter()
@@ -149,9 +192,17 @@ class ObjectCounterApp:
                 self.metrics.record_detection_time(elapsed)
                 self.metrics.record_tracking_time(0.0)
 
+                track_to_object_id: Dict[int, int] = {}
+                if self.reid_manager is not None:
+                    track_to_object_id = self.reid_manager.update(
+                        frame, tracked_objects, frame_idx
+                    )
+
                 counts = self.counter.update(tracked_objects)
 
-                frame = self._render_frame(frame, detections, tracked_objects, counts)
+                frame = self._render_frame(
+                    frame, detections, tracked_objects, counts, track_to_object_id
+                )
 
                 self.metrics.record_frame_time(time.perf_counter() - frame_start)
 
@@ -160,15 +211,31 @@ class ObjectCounterApp:
                 if cv2.waitKey(1) & 0xFF == ord("q"):
                     break
 
+                frame_idx += 1
+
         finally:
             self.cleanup()
 
-    def _render_frame(self, frame, detections, tracked_objects, counts):
+    def _render_frame(
+        self,
+        frame,
+        detections,
+        tracked_objects,
+        counts,
+        track_to_object_id: Optional[Dict[int, int]] = None,
+    ):
         if self.config.get("display.show_detections", True):
             frame = self.renderer.render_detections(frame, detections)
 
+        reid_active = bool(track_to_object_id) and self.config.get(
+            "display.show_object_ids", True
+        )
         if self.config.get("display.show_tracking_ids", True):
-            frame = self.renderer.render_tracks(frame, tracked_objects)
+            frame = self.renderer.render_tracks(
+                frame,
+                tracked_objects,
+                object_ids=track_to_object_id if reid_active else None,
+            )
 
         show_counts = self.config.get("display.show_counts", True)
 
@@ -192,6 +259,16 @@ class ObjectCounterApp:
                 frame,
                 self.counter.get_line_counts(),
                 y_start=y_start,
+            )
+
+        if (
+            self.reid_manager is not None
+            and self.config.get("display.show_reid_stats", True)
+        ):
+            frame = self.renderer.render_reid_stats(
+                frame,
+                unique_total=self.reid_manager.total_object_count(),
+                active=self.reid_manager.active_object_count(),
             )
 
         fps = self.metrics.get_fps()

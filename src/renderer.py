@@ -1,6 +1,6 @@
 """Rendering module for visualization."""
 
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -67,6 +67,7 @@ class FrameRenderer:
         frame: np.ndarray,
         tracked_objects: TrackedObjects,
         show_ids: bool = True,
+        object_ids: Optional[Dict[int, int]] = None,
     ) -> np.ndarray:
         """Render tracked objects on frame.
 
@@ -74,6 +75,10 @@ class FrameRenderer:
             frame: Input frame.
             tracked_objects: Dictionary of {track_id: (bbox, class_name)}.
             show_ids: Whether to show track IDs.
+            object_ids: Optional mapping {track_id: object_id} from ReIDManager.
+                When provided, box colour is keyed by object_id (stable across
+                tracker resets) and the label shows the persistent identity.
+                Label format: "#N class [tM]" where N=object_id, M=track_id.
 
         Returns:
             Frame with rendered tracks.
@@ -82,12 +87,21 @@ class FrameRenderer:
 
         for track_id, (bbox, class_name) in tracked_objects.items():
             x1, y1, x2, y2 = bbox
-            color = self.colors[track_id % len(self.colors)]
 
-            # Draw tracking bounding box.
+            if object_ids is not None:
+                obj_id = object_ids.get(track_id)
+                if obj_id is not None:
+                    color = self.colors[obj_id % len(self.colors)]
+                    label = f"#{obj_id} {class_name} [t{track_id}]"
+                else:
+                    # track_id not yet resolved — fall back to temporary display
+                    color = self.colors[track_id % len(self.colors)]
+                    label = f"t{track_id} {class_name}"
+            else:
+                color = self.colors[track_id % len(self.colors)]
+                label = f"ID {track_id}: {class_name}" if show_ids else class_name
+
             cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-
-            label = f"ID {track_id}: {class_name}" if show_ids else class_name
             self._draw_label(frame, label, x1, y1, bg_color=color)
 
         return frame
@@ -261,6 +275,67 @@ class FrameRenderer:
                         cv2.LINE_AA,
                     )
                     y += row_h
+
+        return frame
+
+    def render_reid_stats(
+        self,
+        frame: np.ndarray,
+        unique_total: int,
+        active: int,
+    ) -> np.ndarray:
+        """Render a small Re-ID statistics panel below the FPS counter.
+
+        Shows the total number of unique objects seen and how many are
+        currently active, making it easy to verify that persistent IDs
+        survive re-entries without inflating the count.
+
+        Args:
+            frame: Input frame.
+            unique_total: Total unique objects registered since session start.
+            active: Number of currently active objects in memory.
+
+        Returns:
+            Frame with ReID stats panel rendered.
+        """
+        frame = frame.copy()
+        h, w = frame.shape[:2]
+
+        lines = [
+            f"ReID unique: {unique_total}",
+            f"ReID active: {active}",
+        ]
+
+        line_h = 22
+        padding_x = 8
+        panel_h = len(lines) * line_h + 10
+
+        # Measure widest line to size the panel.
+        max_w = max(
+            cv2.getTextSize(t, self.font, self.font_size * 0.75, 1)[0][0]
+            for t in lines
+        )
+        panel_w = max_w + padding_x * 2
+
+        # Position: top-right corner, below the FPS box (approx y=50).
+        x1 = w - panel_w - 10
+        y1 = 50
+        x2 = w - 10
+        y2 = y1 + panel_h
+
+        cv2.rectangle(frame, (x1, y1), (x2, y2), self.panel_bg_color, -1)
+
+        for i, text in enumerate(lines):
+            cv2.putText(
+                frame,
+                text,
+                (x1 + padding_x, y1 + (i + 1) * line_h),
+                self.font,
+                self.font_size * 0.75,
+                self.metric_color,
+                1,
+                cv2.LINE_AA,
+            )
 
         return frame
 

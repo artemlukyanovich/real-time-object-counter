@@ -2,8 +2,12 @@ video:
   source: 0  # Webcam by default (0=default camera, or path to video file)
   fps: null         # null = read from source; explicit value overrides it
   fallback_fps: 30  # used when fps is null and the source reports 0 or nothing
-  frame_width: 1280
-  frame_height: 720
+#  frame_width: 1280
+#  frame_height: 720
+#  frame_width: 960
+#  frame_height: 540
+  frame_width: 640
+  frame_height: 360
 
 detector:
   model: "models/yolov8n.pt"  # nano model for speed
@@ -104,7 +108,7 @@ display:
   show_detections: true
   show_tracking_ids: true
   show_counts: true
-  font_size: 1.0
+  font_size: 0.75
 
   # Show persistent object IDs (OBJ N) on bounding boxes when reid.enabled is true.
   # Box colour is keyed by object_id (stable across tracker resets) rather than track_id.
