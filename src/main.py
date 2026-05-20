@@ -132,14 +132,16 @@ class ObjectCounterApp:
                 "memory.max_embeddings_per_object", 5
             ),
         )
-        self.reid_manager = ReIDManager(cropper, embedder, memory)
+        min_track_age = self.config.get("reid.min_track_age", 1)
+        self.reid_manager = ReIDManager(cropper, embedder, memory, min_track_age=min_track_age)
         self._reid_interval = self.config.get("reid.update_interval", 1)
 
         print(
             f"ReID: enabled | model={emb_cfg.get('embedder.model_name', 'ViT-B-32')} "
             f"device={emb_cfg.get('embedder.device', 'cpu')} "
             f"threshold={emb_cfg.get('memory.similarity_threshold', 0.75)} "
-            f"update_interval={self._reid_interval}"
+            f"update_interval={self._reid_interval} "
+            f"min_track_age={min_track_age}"
         )
 
     def _resolve_lost_track_buffer(self, fps: float) -> int:

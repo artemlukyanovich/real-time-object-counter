@@ -6,6 +6,8 @@
 |------|-----------|
 | `configs/default.yaml` | Основной конфиг по умолчанию |
 | `configs/experiments/*.yaml` | Конфиги экспериментов (та же структура, что у `default.yaml`) |
+| `configs/embeddings/default.yaml` | Параметры CLIP-эмбеддингов и памяти ReID (см. [Секция `reid`](#секция-reid)) |
+| `configs/embeddings/experiments/*.yaml` | Эксперименты с моделями эмбеддингов |
 
 Загружается классом `Config` (`src/config.py`). Доступ к параметрам — через dot-notation: `config.get("detector.confidence_threshold")`.
 
@@ -50,6 +52,12 @@ counter:
   count_zone: null
   crossing_lines: null
 
+reid:
+  enabled: false
+  embeddings_config: "configs/embeddings/default.yaml"
+  update_interval: 3
+  min_track_age: 1
+
 output:
   save_video: false
   output_dir: "outputs"
@@ -61,6 +69,8 @@ display:
   show_tracking_ids: true
   show_counts: true
   font_size: 1.0
+  show_object_ids: true   # только при reid.enabled: true
+  show_reid_stats: true   # только при reid.enabled: true
 ```
 
 ---
@@ -255,6 +265,44 @@ crossing_lines:
 
 ---
 
+## Секция `reid`
+
+CLIP-based Re-Identification pipeline — назначает каждому объекту постоянный `object_id`, который сохраняется при потере трека, окклюзии и повторном появлении. Работает поверх стандартного трекера.
+
+| Параметр | Тип | По умолчанию | Описание |
+|----------|-----|-------------|----------|
+| `enabled` | bool | `false` | Включить CLIP ReID pipeline |
+| `embeddings_config` | str | `"configs/embeddings/default.yaml"` | Путь к конфигу эмбеддингов (модель, память, cropper) |
+| `update_interval` | int | `3` | Запускать embedding-пайплайн каждые N кадров. `1` = каждый кадр |
+| `min_track_age` | int | `1` | Минимум кадров трека до регистрации нового объекта в памяти. `1` = мгновенно |
+
+**`update_interval`** — снижает нагрузку на GPU/CPU. На кадрах между обновлениями переиспользуются последние известные `object_id`. При 30 FPS значение `3` даёт ~10 embedding-проходов в секунду — достаточно для стабильного ReID.
+
+**`min_track_age`** — фильтрует «мелькающие» объекты (ложные детекции на 1–5 кадров). Считается в реальных кадрах по `frame_idx` **независимо от `update_interval`**. Трек, совпавший с уже известным объектом по эмбеддингу, сопоставляется мгновенно независимо от этого порога.
+
+| `min_track_age` | Поведение |
+|---|---|
+| `1` | Отключено — каждый трек сразу регистрируется |
+| `8` | При 30 FPS ≈ 0.25 сек — отсекает мгновенные ложные детекции |
+| `30` | 1 секунда — только устойчивые объекты |
+
+**Конфиг эмбеддингов** (`configs/embeddings/default.yaml`) содержит параметры модели и памяти:
+
+| Параметр | По умолчанию | Описание |
+|----------|-------------|----------|
+| `embedder.model_name` | `"ViT-B-32"` | OpenCLIP модель. Варианты: `ViT-B-32`, `ViT-B-16`, `ViT-L-14`, `ViT-H-14` |
+| `embedder.pretrained` | `"laion2b_s34b_b79k"` | Тег весов (должен соответствовать модели) |
+| `embedder.device` | `"cuda"` | Устройство для эмбеддингов: `"cuda"` или `"cpu"` |
+| `cropper.padding` | `8` | Отступ в пикселях вокруг bbox при вырезании crop |
+| `cropper.save_crops` | `false` | Сохранять crops в `outputs/crops/` для визуальной проверки |
+| `memory.similarity_threshold` | `0.75` | Порог cosine similarity для Re-ID совпадения [0.0–1.0] |
+| `memory.max_missing_frames` | `90` | Кадров без детекции до деактивации объекта (~3 сек при 30 FPS) |
+| `memory.max_embeddings_per_object` | `5` | Rolling buffer эмбеддингов на объект |
+
+Подробнее — в [docs/embeddings_reid.md](embeddings_reid.md).
+
+---
+
 ## Секция `output`
 
 | Параметр | Тип | По умолчанию | Описание |
@@ -274,6 +322,10 @@ crossing_lines:
 | `show_tracking_ids` | bool | `true` | Отображать bbox треков с ID |
 | `show_counts` | bool | `true` | Отображать панель счётчиков |
 | `font_size` | float | `1.0` | Масштаб шрифта аннотаций |
+| `show_object_ids` | bool | `true` | Показывать постоянный `object_id` на bbox вместо `track_id` (только при `reid.enabled: true`) |
+| `show_reid_stats` | bool | `true` | Панель "ReID unique / active" в правом верхнем углу (только при `reid.enabled: true`) |
+
+При `show_object_ids: true` формат метки на bounding box: `#N class [tM]`, где `N` — постоянный `object_id`, `class` — класс, `tM` — текущий `track_id` трекера. Цвет bbox определяется по `object_id` и не меняется при смене `track_id`.
 
 ---
 
@@ -331,6 +383,19 @@ tracker:
   matching_cost_threshold: 0.7
 ```
 BoT-SORT с Re-ID восстанавливает ID объекта по внешнему виду даже после длительного отсутствия в кадре. ReID-модель скачается автоматически (`osnet_x0_25_market.pt`).
+
+### Устойчивый подсчёт с CLIP ReID (постоянные ID, фильтр мелькашей)
+```yaml
+reid:
+  enabled: true
+  embeddings_config: "configs/embeddings/default.yaml"
+  update_interval: 3   # каждые 3 кадра при 30 FPS
+  min_track_age: 8     # ≈0.25 сек — не считать объекты, мелькнувшие на 1–7 кадров
+display:
+  show_object_ids: true
+  show_reid_stats: true
+```
+CLIP ReID назначает объекту постоянный `#N`, не меняющийся при потере трека. `min_track_age: 8` исключает ложные детекции, не успевшие устояться.
 
 ### Отладка (видны все детекции и треки)
 ```yaml

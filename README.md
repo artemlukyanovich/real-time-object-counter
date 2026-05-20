@@ -42,6 +42,7 @@ See `docs/dataset_preparation.md` for dataset preparation and training details.
 See the [Google Drive folder](https://drive.google.com/drive/folders/1quACHaNNk9WtV1Zl8V0zwyvrnIoeJjDI?usp=sharing) for demos and workflow examples:
 - People Tracking Demo
 - Custom Object Tracking Demo
+- Persistent Object Tracking with CLIP Re-ID Demo
 - Auto-label Review Demo
 - Label Studio Annotation Example
 

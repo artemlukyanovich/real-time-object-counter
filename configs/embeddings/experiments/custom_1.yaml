@@ -2,7 +2,11 @@
 
 embedder:
   # OpenCLIP model name.
-  # Other options: "ViT-L-14", "ViT-H-14" (larger, slower, more accurate)
+  # Pretrained tag must match the model — see table below:
+  #   ViT-B-32  → laion2b_s34b_b79k
+  #   ViT-B-16  → laion2b_s34b_b88k
+  #   ViT-L-14  → laion2b_s32b_b82k
+  #   ViT-H-14  → laion2b_s32b_b79k
   model_name: "ViT-B-32"
 
   # OpenCLIP pretrained weights tag.
@@ -10,7 +14,6 @@ embedder:
   pretrained: "laion2b_s34b_b79k"
 
   # Inference device: "cuda" or "cpu".
-  # Falls back to CPU automatically if CUDA is not available.
   device: "cuda"
 
   # L2-normalise embeddings so cosine similarity == dot product.
@@ -28,7 +31,7 @@ cropper:
 memory:
   # Cosine similarity score required to accept a re-identification match.
   # Range [0.0, 1.0]. Higher = stricter matching.
-  similarity_threshold: 0.75
+  similarity_threshold: 0.85
 
   # Frames without a detection before an object is deactivated.
   # At 30 FPS, 90 frames == 3 seconds.

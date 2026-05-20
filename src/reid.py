@@ -33,6 +33,11 @@ class ReIDManager:
         cropper: ObjectCropper instance for extracting bbox crops.
         embedder: ObjectEmbedder instance for generating feature vectors.
         memory: ObjectMemory instance for storing and searching known objects.
+        min_track_age: Minimum consecutive frames a brand-new track must be
+            visible before it is registered as a new object in memory (and
+            counted in unique/active stats).  Tracks that match an existing
+            object via embedding similarity are assigned immediately regardless
+            of this value.  Default 1 = disabled (instant registration).
     """
 
     def __init__(
@@ -40,13 +45,17 @@ class ReIDManager:
         cropper: ObjectCropper,
         embedder: ObjectEmbedder,
         memory: ObjectMemory,
+        min_track_age: int = 1,
     ) -> None:
         self.cropper = cropper
         self.embedder = embedder
         self.memory = memory
+        self.min_track_age = max(1, min_track_age)
 
         # Maps currently active tracker track_id -> persistent object_id
         self._track_to_object: Dict[int, int] = {}
+        # First frame_idx at which each unconfirmed (pending) track was seen
+        self._pending_first_frame: Dict[int, int] = {}
 
     def update(
         self,
@@ -97,33 +106,54 @@ class ReIDManager:
         # ── 2. Embed all crops in a single batch pass ────────────────────
         embeddings = self.embedder.embed_batch(crops)  # (N, dim)
 
-        # ── 3. Resolve object identities ────────────────────────────────
+        # ── 3a. Matching pass — all find_match() calls against pre-existing memory ──
+        # Confirmed tracks are updated; unconfirmed tracks are matched or queued.
+        # No new objects are added to memory here, so two pending tracks that both
+        # reach min_track_age in the same update() call cannot match each other.
+        pending_to_confirm: list = []  # (track_id, bbox, class_name, embedding)
+
         for i, track_id in enumerate(valid_track_ids):
             bbox, class_name = tracked_objects[track_id]
             embedding = embeddings[i]
 
             if track_id in self._track_to_object:
+                # Already confirmed — update memory and emit result.
                 object_id = self._track_to_object[track_id]
                 self.memory.update(object_id, bbox, embedding, track_id, frame_idx)
+                result[track_id] = object_id
             else:
                 matched_id, _score = self.memory.find_match(embedding, frame_idx)
 
                 if matched_id is not None:
-                    object_id = matched_id
-                    self.memory.update(object_id, bbox, embedding, track_id, frame_idx)
+                    # Re-ID hit against an existing confirmed object — assign immediately.
+                    self.memory.update(matched_id, bbox, embedding, track_id, frame_idx)
+                    self._track_to_object[track_id] = matched_id
+                    self._pending_first_frame.pop(track_id, None)
+                    result[track_id] = matched_id
                 else:
-                    object_id = self.memory.add(
-                        class_name, bbox, embedding, track_id, frame_idx
-                    )
+                    # No match — apply min_track_age gate using real frame distance.
+                    if track_id not in self._pending_first_frame:
+                        self._pending_first_frame[track_id] = frame_idx
+                    age = frame_idx - self._pending_first_frame[track_id] + 1
+                    if age >= self.min_track_age:
+                        pending_to_confirm.append((track_id, bbox, class_name, embedding))
+                    # else: still pending — not yet included in result or memory
 
-                self._track_to_object[track_id] = object_id
+        # ── 3b. Confirmation pass — add newly-confirmed tracks to memory ─────────
+        # Runs after all matching is complete so new objects don't interfere with
+        # each other's find_match() calls from step 3a.
+        for track_id, bbox, class_name, embedding in pending_to_confirm:
+            object_id = self.memory.add(class_name, bbox, embedding, track_id, frame_idx)
+            self._track_to_object[track_id] = object_id
+            del self._pending_first_frame[track_id]
+            result[track_id] = object_id
 
-            result[track_id] = self._track_to_object[track_id]
-
-        # Remove stale mappings for tracks that are no longer active.
+        # ── 4. Remove stale mappings for tracks that are no longer active ────────
         active_track_ids = set(tracked_objects.keys())
         for tid in [t for t in self._track_to_object if t not in active_track_ids]:
             del self._track_to_object[tid]
+        for tid in [t for t in self._pending_first_frame if t not in active_track_ids]:
+            del self._pending_first_frame[tid]
 
         return result
 

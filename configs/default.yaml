@@ -99,6 +99,12 @@ reid:
   # stable re-id while reducing GPU/CPU load significantly.
   update_interval: 3
 
+  # Minimum consecutive frames a brand-new track must be visible before it is
+  # registered as a new object (counted in unique/active stats).
+  # Tracks that match an existing object are assigned immediately regardless.
+  # At 30 FPS: 1 = instant (disabled), 8 ≈ 0.25 s, 30 = 1 s.
+  min_track_age: 1
+
 output:
   save_video: false
   output_dir: "outputs"
