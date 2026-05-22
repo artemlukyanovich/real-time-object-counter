@@ -128,9 +128,11 @@ class ObjectCounterApp:
         memory = ObjectMemory(
             similarity_threshold=emb_cfg.get("memory.similarity_threshold", 0.75),
             max_missing_frames=emb_cfg.get("memory.max_missing_frames", 90),
-            max_embeddings_per_object=emb_cfg.get(
-                "memory.max_embeddings_per_object", 5
-            ),
+            max_embeddings_per_object=emb_cfg.get("memory.max_embeddings_per_object", 5),
+            aggregation_method=emb_cfg.get("memory.aggregation_method", "mean"),
+            ema_alpha=emb_cfg.get("memory.ema_alpha", 0.3),
+            recent_n=emb_cfg.get("memory.recent_n", 3),
+            weighted_decay=emb_cfg.get("memory.weighted_decay", 0.7),
         )
         min_track_age = self.config.get("reid.min_track_age", 1)
         self.reid_manager = ReIDManager(cropper, embedder, memory, min_track_age=min_track_age)

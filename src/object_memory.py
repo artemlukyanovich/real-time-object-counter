@@ -2,7 +2,7 @@
 
 import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Literal, Optional, Tuple
 
 import numpy as np
 
@@ -10,6 +10,8 @@ from src.similarity import find_best_match
 
 
 BBox = Tuple[int, int, int, int]  # (x1, y1, x2, y2)
+
+AggregationMethod = Literal["mean", "ema", "weighted", "recent"]
 
 
 @dataclass
@@ -24,6 +26,7 @@ class ObjectRecord:
     last_seen_frame: int
     last_seen_time: float = field(default_factory=time.time)
     is_active: bool = True
+    ema: Optional[np.ndarray] = field(default=None)  # running EMA state
 
     def mean_embedding(self) -> np.ndarray:
         """Mean of all stored embeddings (float32)."""
@@ -38,6 +41,12 @@ class ObjectMemory:
       - ``update()`` refreshes bbox/embedding for an already-known object.
       - ``find_match()`` searches active objects for the closest embedding.
       - ``expire_old()`` deactivates objects not seen for too long.
+
+    Aggregation methods (``aggregation_method``):
+      - ``mean``     — simple average of all stored embeddings (default, stable).
+      - ``ema``      — exponential moving average; adapts to recent appearance changes.
+      - ``weighted`` — weighted average with exponential decay; newer = higher weight.
+      - ``recent``   — mean of only the last ``recent_n`` embeddings.
     """
 
     def __init__(
@@ -45,10 +54,18 @@ class ObjectMemory:
         similarity_threshold: float = 0.75,
         max_missing_frames: int = 90,
         max_embeddings_per_object: int = 5,
+        aggregation_method: AggregationMethod = "mean",
+        ema_alpha: float = 0.3,
+        recent_n: int = 3,
+        weighted_decay: float = 0.7,
     ) -> None:
         self.similarity_threshold = similarity_threshold
         self.max_missing_frames = max_missing_frames
         self.max_embeddings_per_object = max_embeddings_per_object
+        self.aggregation_method = aggregation_method
+        self.ema_alpha = ema_alpha
+        self.recent_n = recent_n
+        self.weighted_decay = weighted_decay
 
         self._records: Dict[int, ObjectRecord] = {}
         self._next_id: int = 1
@@ -64,14 +81,16 @@ class ObjectMemory:
         """Register a new object. Returns the assigned object_id."""
         object_id = self._next_id
         self._next_id += 1
-        self._records[object_id] = ObjectRecord(
+        record = ObjectRecord(
             object_id=object_id,
             class_name=class_name,
             bbox=bbox,
             track_id=track_id,
             embeddings=[embedding.copy()],
             last_seen_frame=frame_idx,
+            ema=embedding.copy(),
         )
+        self._records[object_id] = record
         return object_id
 
     def update(
@@ -93,6 +112,31 @@ class ObjectMemory:
         record.embeddings.append(embedding.copy())
         if len(record.embeddings) > self.max_embeddings_per_object:
             record.embeddings.pop(0)
+
+        # Update EMA state incrementally (used when aggregation_method="ema")
+        if record.ema is None:
+            record.ema = embedding.copy()
+        else:
+            record.ema = (self.ema_alpha * embedding + (1.0 - self.ema_alpha) * record.ema).astype(np.float32)
+
+    def _aggregate(self, record: ObjectRecord) -> np.ndarray:
+        """Return the representative embedding for a record based on aggregation_method."""
+        if self.aggregation_method == "ema":
+            return record.ema if record.ema is not None else record.mean_embedding()
+
+        if self.aggregation_method == "recent":
+            recent = record.embeddings[-self.recent_n:]
+            return np.mean(recent, axis=0).astype(np.float32)
+
+        if self.aggregation_method == "weighted":
+            n = len(record.embeddings)
+            # weights: oldest → decay^(n-1), ..., newest → 1.0
+            weights = np.array([self.weighted_decay ** (n - 1 - i) for i in range(n)], dtype=np.float32)
+            weights /= weights.sum()
+            return np.average(record.embeddings, axis=0, weights=weights).astype(np.float32)
+
+        # Default: "mean"
+        return record.mean_embedding()
 
     def find_match(
         self,
@@ -119,7 +163,7 @@ class ObjectMemory:
             return None, 0.0
 
         gallery = np.stack(
-            [self._records[oid].mean_embedding() for oid in candidate_ids]
+            [self._aggregate(self._records[oid]) for oid in candidate_ids]
         )
         return find_best_match(
             embedding, gallery, candidate_ids, self.similarity_threshold

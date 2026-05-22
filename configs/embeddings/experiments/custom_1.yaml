@@ -37,8 +37,34 @@ memory:
   # At 30 FPS, 90 frames == 3 seconds.
   max_missing_frames: 90
 
-  # Maximum number of past embeddings to keep per object (rolling average).
+  # Maximum number of past embeddings to keep per object (rolling buffer).
   max_embeddings_per_object: 5
+
+  # How to aggregate stored embeddings when searching for a re-id match.
+  # Options:
+  #   mean     - simple average of all stored embeddings (safe default; stable but
+  #              can blur identity if the object changes appearance over time)
+  #   ema      - exponential moving average; adapts quickly to recent appearance
+  #              changes without discarding history entirely (see ema_alpha)
+  #   weighted - weighted average with exponential decay; most recent embedding
+  #              has the highest weight (see weighted_decay)
+  #   recent   - mean of only the last `recent_n` embeddings; ignores early
+  #              history, best when appearance changes significantly over time
+  aggregation_method: "ema"
+
+  # EMA smoothing factor. Used only when aggregation_method: ema.
+  # Range (0.0, 1.0]. Higher alpha = faster adaptation to recent appearance.
+  # Recommended range: 0.2 (slow adapt) – 0.5 (fast adapt).
+  ema_alpha: 0.3
+
+  # Number of most-recent embeddings to average. Used only when aggregation_method: recent.
+  # Must be <= max_embeddings_per_object.
+  recent_n: 3
+
+  # Per-step weight decay. Used only when aggregation_method: weighted.
+  # Each older embedding is down-weighted by this factor relative to the next newer one.
+  # Range (0.0, 1.0]. Lower = older embeddings matter less.
+  weighted_decay: 0.7
 
 output:
   # Save generated embeddings to outputs/embeddings/ (.npy per object).
