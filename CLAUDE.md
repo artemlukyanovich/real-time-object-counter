@@ -1,0 +1,64 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## What this is
+
+Real-time object detection, tracking, and counting pipeline built on YOLOv8 + Ultralytics trackers (ByteTrack / BoT-SORT), with an optional CLIP-based Re-ID layer for persistent object identities. Reads from a webcam or video file, renders an annotated window, and prints metrics/counts on exit. Project docs in `docs/` are written in Russian.
+
+## Commands
+
+Run the main app (the only "production" entry point):
+```bash
+python -m src.main --source 0                              # webcam index 0
+python -m src.main --source data/input/video.mp4           # video file
+python -m src.main --config configs/experiments/05_bytetrack_accuracy.yaml --source 0
+```
+`--source` overrides `video.source` in the config. Press `q` or `ESC` to quit. A digit string is parsed as a webcam index; anything else is a file path.
+
+ReID integration test / threshold-tuning harness (there is **no pytest suite** — this is the only test, and it requires a real video + downloads model weights):
+```bash
+python -m scripts.test_reid_integration --source data/input/video.mp4 --max-frames 300 --threshold 0.75
+```
+
+Dataset/training scripts (all run as modules from repo root):
+```bash
+python -m scripts.extract_frames data/raw_videos/x.mp4 data/frames/x --step 30
+python -m scripts.split_yolo_dataset <ls_export_dir> <out_dir> --val-ratio 0.2
+python -m scripts.convert_yolo_predictions_to_label_studio <imgs> <labels> <out.json>
+python -m scripts.review_yolo_labels <imgs> <labels> --output-review-dir outputs/label_review
+```
+Custom-model training uses the Ultralytics CLI directly (`yolo detect train ...`); see `docs/dataset_preparation.md`.
+
+## Environments
+
+Two **separate** pip/conda environments are required — Label Studio conflicts with the runtime deps:
+- `requirements.txt` — main runtime (torch, ultralytics, opencv, open-clip-torch). Install torch from the cu118 index.
+- `requirements-annotations.txt` — annotation tooling only (Label Studio), used in a `annotations` env.
+
+YOLO weights (`yolov8n.pt`) and ReID/CLIP weights download automatically on first run.
+
+## Architecture
+
+### Per-frame pipeline (`src/main.py` → `ObjectCounterApp.run`)
+`VideoSource.read()` → `UltralyticsTracker.update(frame)` → `ReIDManager.update()` (optional) → `ObjectCounter.update()` → `FrameRenderer` (composites layers) + `PerformanceMetrics`. Each module is constructed in `_initialize_components()` purely from config values.
+
+**Detection and tracking happen in one pass.** `UltralyticsTracker.update()` calls `model.track(persist=True, ...)`, which runs YOLO detection *and* tracking together. `ObjectDetector` (`src/detector.py`) exists mainly to load and own the shared `YOLO` model object — that model instance is passed into the tracker; the detector is not invoked separately in the loop. Both return the project-wide formats:
+- detections: `List[((x1,y1,x2,y2), class_name, confidence)]`
+- tracked_objects: `Dict[track_id, ((x1,y1,x2,y2), class_name)]`
+
+### Two independent Re-ID layers (do not conflate them)
+1. **Tracker-level Re-ID** — `tracker.algorithm: "botsort_reid"` enables BoT-SORT's built-in OSNet appearance matching, controlled by the `tracker.*` config block. Keeps tracker `track_id`s stable through occlusions.
+2. **Application-level CLIP Re-ID** — the `reid.*` config block enables a separate `ObjectCropper → ObjectEmbedder (OpenCLIP) → ObjectMemory → ReIDManager` chain that assigns each object a **persistent `object_id`** surviving full tracker resets/re-entries. Lives in `src/reid.py`, `src/cropper.py`, `src/embedder.py`, `src/object_memory.py`, `src/similarity.py`, and is configured by a *second* YAML at `reid.embeddings_config` (default `configs/embeddings/default.yaml`). This layer is lazy-imported only when `reid.enabled: true`.
+
+`ReIDManager.update()` is the subtle part: confirmed tracks update memory directly; new tracks first try `memory.find_match()` against existing objects (instant assign on hit), otherwise wait `reid.min_track_age` frames before being registered as a genuinely new object. Matching and new-object registration are split into two passes so two simultaneously-new tracks can't match each other. `reid.update_interval` runs the (expensive) embedding pass only every N frames, reusing last-known `object_id`s in between.
+
+### Configuration (`src/config.py`)
+Dot-notation YAML loader (`config.get("tracker.algorithm")`). **Critical distinction:** `get()` treats explicit `null` as "missing" and returns the default; `get_raw()` preserves explicit `null`. Use `get_raw()` for fields where `null` is a meaningful "auto" sentinel — e.g. `video.fps` (null = read from source) and `tracker.lost_track_buffer` (null = compute from FPS × `auto_lost_track_buffer_seconds`). See `_resolve_lost_track_buffer` / `_get_configured_fps` in `main.py`.
+
+The user-facing `tracker.*` config keys are friendly names that the tracker maps to Ultralytics' raw names (e.g. `track_activation_threshold` → both `track_high_thresh` and `new_track_thresh`; `matching_cost_threshold` → `match_thresh`). `UltralyticsTracker._write_tracker_yaml` merges `_ALGORITHM_DEFAULTS[algorithm]` with these overrides and writes a generated tracker YAML to `.runtime/trackers/<algorithm>.yaml` at startup. **Do not hand-edit files in `.runtime/`** — they are regenerated every run.
+
+`configs/experiments/` holds ready-made presets (`01_bytetrack_fast` … `05_bytetrack_accuracy`, plus `custom_*` for the trained 3-class model: `arx`, `taar`, `the_institute`).
+
+### Counting (`src/counter.py`)
+Two modes, combinable: zone-based (count once when a centroid enters `counter.count_zone` polygon) and line-crossing (per-direction in/out counts when a centroid crosses a line in `counter.crossing_lines`). Direction is determined by `point_side_of_line` sign flips tracked per `track_id`.
