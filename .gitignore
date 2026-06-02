@@ -44,6 +44,10 @@ Thumbs.db
 *.avi
 *.mov
 
+# Exported models (hardware/TensorRT-version specific — re-export, never commit)
+*.onnx
+*.engine
+
 # Ignore contents but keep directory structure via .gitkeep
 data/input/**
 !data/input/.gitkeep

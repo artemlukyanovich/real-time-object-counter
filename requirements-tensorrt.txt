@@ -1,0 +1,38 @@
+# TensorRT — optional, NVIDIA GPU only.
+#
+# Needed ONLY for the .engine fast path:
+#   - exporting  .pt -> .engine  (scripts/export_model.py --format engine)
+#   - running an .engine model in the pipeline (detector.model: *.engine)
+# Not needed for the ONNX path — see requirements.txt. Do NOT install on
+# machines without an NVIDIA GPU.
+#
+# INSTALL (note the flag — it is required):
+#   pip install --no-build-isolation -r requirements-tensorrt.txt
+#   python -c "import tensorrt as trt; print(trt.__version__)"   # verify
+#   or
+#   python -c "import torch; import tensorrt as trt; print(torch.__version__); print(trt.__version__)"
+#
+# Why --no-build-isolation:
+#   The `tensorrt` PyPI package is a meta-package whose setup.py runs a custom
+#   InstallCommand that shells out to `python -m pip install tensorrt_libs ...`.
+#   Under pip's default build isolation the main env's site-packages (incl. pip)
+#   are hidden from that subprocess -> "No module named pip" -> build fails.
+#   --no-build-isolation builds with the env visible so the subprocess finds pip.
+#   (Requires setuptools + wheel already installed in the env — they are.)
+#   The meta-package is genuinely required: the importable `tensorrt` module is
+#   its 2-line glue (`from tensorrt_bindings import *`); tensorrt-libs/-bindings
+#   alone do NOT provide `import tensorrt`.
+#
+# CUDA version skew — VALIDATED OK on this stack (RTX 3050 Ti, driver 580):
+#   tensorrt-libs 8.6.1 pulls CUDA 12 runtime wheels (nvidia-*-cu12, ~2.5 GB)
+#   alongside the CUDA 11.8 torch (cu118). A real .pt -> .engine FP16 export and
+#   .engine inference both work — the two CUDA runtimes coexist via distinct
+#   sonames. The TRT bindings need libcudnn.so.8, which TORCH bundles
+#   (torch/lib/libcudnn.so.8, cuDNN 8.7); it resolves as long as torch is
+#   imported before tensorrt — which the pipeline always does (ultralytics/torch
+#   load first). Standalone check: `python -c "import torch, tensorrt"`.
+
+--extra-index-url https://pypi.nvidia.com
+tensorrt-libs==8.6.1
+tensorrt-bindings==8.6.1
+tensorrt==8.6.1

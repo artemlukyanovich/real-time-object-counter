@@ -30,11 +30,21 @@ python -m scripts.review_yolo_labels <imgs> <labels> --output-review-dir outputs
 ```
 Custom-model training uses the Ultralytics CLI directly (`yolo detect train ...`); see `docs/dataset_preparation.md`.
 
+Export a `.pt` model to ONNX (portable) or TensorRT (NVIDIA-only, fastest), then benchmark backends:
+```bash
+python -m scripts.export_model --weights models/yolov8n.pt --format onnx
+python -m scripts.export_model --weights models/yolov8n.pt --format engine --half
+python -m scripts.export_model --weights <pt> --format engine --int8 --data <data.yaml>
+python -m scripts.benchmark_backends --source <video> --models models/yolov8n.pt models/yolov8n.onnx
+```
+See `docs/export_optimization.md`. `.onnx`/`.engine` are gitignored (hardware/TensorRT-version specific — re-export, never commit).
+
 ## Environments
 
 Two **separate** pip/conda environments are required — Label Studio conflicts with the runtime deps:
-- `requirements.txt` — main runtime (torch, ultralytics, opencv, open-clip-torch). Install torch from the cu118 index.
+- `requirements.txt` — main runtime (torch, ultralytics, opencv, open-clip-torch) + the portable ONNX export/inference path (onnx, onnxruntime). Install torch from the cu118 index. Note: ultralytics 8.0.200 forces `.onnx` onto CPU (`autobackend.py:103-106`), so plain `onnxruntime` (not -gpu) is used; GPU acceleration is the TensorRT `.engine` path.
 - `requirements-annotations.txt` — annotation tooling only (Label Studio), used in a `annotations` env.
+- `requirements-tensorrt.txt` — optional, NVIDIA-only TensorRT (`.engine`) path; **must** be installed with `pip install --no-build-isolation -r requirements-tensorrt.txt` (the `tensorrt` meta-package's build subprocess can't see pip under build isolation). Note: TRT 8.6.1 pulls CUDA-12 wheels alongside the cu118 torch stack — unverified, validate with a real `.engine` export.
 
 YOLO weights (`yolov8n.pt`) and ReID/CLIP weights download automatically on first run.
 
@@ -44,6 +54,8 @@ YOLO weights (`yolov8n.pt`) and ReID/CLIP weights download automatically on firs
 `VideoSource.read()` → `UltralyticsTracker.update(frame)` → `ReIDManager.update()` (optional) → `ObjectCounter.update()` → `FrameRenderer` (composites layers) + `PerformanceMetrics`. Each module is constructed in `_initialize_components()` purely from config values.
 
 **Detection and tracking happen in one pass.** `UltralyticsTracker.update()` calls `model.track(persist=True, ...)`, which runs YOLO detection *and* tracking together. `ObjectDetector` (`src/detector.py`) exists mainly to load and own the shared `YOLO` model object — that model instance is passed into the tracker; the detector is not invoked separately in the loop. Both return the project-wide formats:
+
+**Multi-backend model loading.** `detector.model` may point at a `.pt`, `.onnx`, or `.engine` file; `ObjectDetector._detect_backend()` infers the backend from the suffix. Only `.pt` gets `.to(device)` (calling it on a TensorRT engine raises). The resolved `device` is threaded through `ObjectDetector → UltralyticsTracker → model.track(device=...)`; `.engine` is forced to CUDA (GPU-only, no CPU fallback). Note: with ultralytics 8.0.200, `.onnx` always runs on CPU (AutoBackend forces it — `autobackend.py:103-106`), so GPU acceleration is the `.engine` path, and `.onnx` is the portable/CPU path. See `docs/export_optimization.md`.
 - detections: `List[((x1,y1,x2,y2), class_name, confidence)]`
 - tracked_objects: `Dict[track_id, ((x1,y1,x2,y2), class_name)]`
 

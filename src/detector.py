@@ -30,14 +30,18 @@ class ObjectDetector:
             device: Device used for inference ("cuda" or "cpu").
         """
         self.model_name = self._normalize_model_name(model_name)
+        self.backend = self._detect_backend(self.model_name)
         self.confidence_threshold = confidence_threshold
-        self.device = self._resolve_device(device)
+        self.device = self._resolve_device(device, self.backend)
 
-        print(f"Device: {self.device}")
+        print(f"Detector backend: {self.backend} | device: {self.device}")
 
-        # Load YOLO model and move it to the selected device.
+        # Load YOLO model. Exported backends (.onnx / .engine) are already bound
+        # to their own runtime/device, so only native PyTorch (.pt) models need
+        # an explicit .to(device) move — calling it on an engine raises.
         self.model = YOLO(self.model_name)
-        self.model.to(self.device)
+        if self.backend == "pytorch":
+            self.model.to(self.device)
 
     def detect(self, frame: np.ndarray) -> List[Detection]:
         """Detect objects in a frame.
@@ -93,12 +97,43 @@ class ObjectDetector:
         return f"{model_name}.pt"
 
     @staticmethod
-    def _resolve_device(device: str) -> str:
-        """Resolve inference device.
+    def _detect_backend(model_name: str) -> str:
+        """Infer the inference backend from the model file suffix.
 
-        If CUDA is requested but not available, fallback to CPU instead of failing.
+        Returns one of:
+        - "pytorch"  for .pt   (native, CPU or CUDA)
+        - "onnx"     for .onnx  (portable, run via ONNX Runtime)
+        - "tensorrt" for .engine (NVIDIA GPU only)
         """
-        if device == "cuda" and not torch.cuda.is_available():
+        suffix = Path(model_name).suffix.lower()
+        if suffix == ".engine":
+            return "tensorrt"
+        if suffix == ".onnx":
+            return "onnx"
+        return "pytorch"
+
+    @staticmethod
+    def _resolve_device(device: str, backend: str = "pytorch") -> str:
+        """Resolve inference device, accounting for the model backend.
+
+        - TensorRT engines are GPU-only and bound to the GPU they were built on,
+          so CUDA is required (no CPU fallback).
+        - PyTorch / ONNX fall back to CPU when CUDA is requested but unavailable.
+          For ONNX, GPU execution additionally needs onnxruntime-gpu installed;
+          otherwise ONNX Runtime silently runs on CPU regardless of this value.
+        """
+        cuda_available = torch.cuda.is_available()
+
+        if backend == "tensorrt":
+            if not cuda_available:
+                raise RuntimeError(
+                    "TensorRT engine requires an NVIDIA GPU, but CUDA is unavailable."
+                )
+            if device == "cpu":
+                print("TensorRT engine is GPU-only; ignoring device='cpu'.")
+            return "cuda"
+
+        if device == "cuda" and not cuda_available:
             print("CUDA requested but unavailable. Falling back to CPU.")
             return "cpu"
 

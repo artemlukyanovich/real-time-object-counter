@@ -85,6 +85,7 @@ class UltralyticsTracker:
         proximity_threshold: float = 0.5,
         appearance_threshold: float = 0.25,
         allowed_classes: Optional[List[str]] = None,
+        device: str = "cuda",
     ) -> None:
         """Initialise UltralyticsTracker.
 
@@ -114,6 +115,10 @@ class UltralyticsTracker:
             allowed_classes: Optional list of class names to detect/track.
                 None or empty list = all classes. Unknown names are warned and
                 skipped. Example: ["person", "car"].
+            device: Inference device passed to model.track() ("cuda" or "cpu").
+                Should match the device the shared model was loaded on. For ONNX
+                models this selects the ONNX Runtime execution provider; for
+                .pt / .engine the model is already bound to its device.
         """
         if algorithm not in _SUPPORTED_ALGORITHMS:
             raise ValueError(
@@ -122,6 +127,7 @@ class UltralyticsTracker:
             )
         self._model = model
         self._conf = conf_threshold
+        self._device = device
         self.algorithm = algorithm
         self._allowed_class_ids = self._resolve_class_ids(allowed_classes)
         self._yaml_path = self._write_tracker_yaml(
@@ -160,6 +166,7 @@ class UltralyticsTracker:
             conf=self._conf,
             verbose=False,
             classes=self._allowed_class_ids,
+            device=self._device,
         )
 
         detections: List[Detection] = []

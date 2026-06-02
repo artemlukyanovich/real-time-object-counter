@@ -8,3 +8,17 @@ supervision==0.28.0
 rich==13.7.0
 pyyaml==6.0.1
 open-clip-torch==3.3.0
+
+# --- Model export & ONNX inference (portable, installs on any hardware) ---
+#   onnx         : produce .onnx and the intermediate graph for TensorRT export
+#   onnxruntime  : run .onnx (CPU) — the portable inference path
+# Plain `onnxruntime` (CPU), NOT onnxruntime-gpu: ultralytics 8.0.200 forces ONNX
+# onto CPU regardless of GPU (autobackend.py:103-106), so the GPU package gives no
+# benefit here and its install also clobbers the shared `onnxruntime` namespace.
+# For GPU acceleration on NVIDIA use TensorRT (.engine) — see requirements-tensorrt.txt.
+onnx==1.15.0
+onnxruntime==1.16.3
+
+# TensorRT (.engine fast path, NVIDIA GPU only) is opt-in and lives in a separate
+# file because the `tensorrt` meta-package build is fragile and NVIDIA-specific:
+#   pip install --no-build-isolation -r requirements-tensorrt.txt

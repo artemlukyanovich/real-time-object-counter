@@ -83,6 +83,7 @@ class ObjectCounterApp:
             proximity_threshold=proximity_threshold,
             appearance_threshold=appearance_threshold,
             allowed_classes=allowed_classes,
+            device=self.detector.device,
         )
 
         print(
