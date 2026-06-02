@@ -38,10 +38,14 @@ class ObjectDetector:
 
         # Load YOLO model. Exported backends (.onnx / .engine) are already bound
         # to their own runtime/device, so only native PyTorch (.pt) models need
-        # an explicit .to(device) move — calling it on an engine raises.
-        self.model = YOLO(self.model_name)
+        # an explicit .to(device) move — calling it on an engine raises. They also
+        # can't auto-guess the task, so declare it explicitly (this project is
+        # detection-only) to silence the "Unable to guess model task" warning.
         if self.backend == "pytorch":
+            self.model = YOLO(self.model_name)
             self.model.to(self.device)
+        else:
+            self.model = YOLO(self.model_name, task="detect")
 
     def detect(self, frame: np.ndarray) -> List[Detection]:
         """Detect objects in a frame.

@@ -195,6 +195,25 @@ class UltralyticsTracker:
 
     # ── internal ─────────────────────────────────────────────────────
 
+    def _resolve_model_names(self) -> Optional[Dict[int, str]]:
+        """Return the model's {class_id: name} mapping across all backends.
+
+        For .pt models ``model.names`` is populated at load time. Exported
+        backends (.engine / .onnx) leave ``model.names`` as None until the
+        underlying AutoBackend is instantiated — which first happens on the
+        initial inference; the names then live on ``model.predictor.model.names``.
+        A one-off warmup predict triggers that load.
+        """
+        names = getattr(self._model, "names", None)
+        if names:
+            return names
+
+        # Exported backend: force the predictor/AutoBackend to load, then read names.
+        self._model.predict(np.zeros((640, 640, 3), dtype=np.uint8), verbose=False)
+        predictor = getattr(self._model, "predictor", None)
+        backend = getattr(predictor, "model", None) if predictor is not None else None
+        return getattr(backend, "names", None) if backend is not None else None
+
     def _resolve_class_ids(
         self, allowed_classes: Optional[List[str]]
     ) -> Optional[List[int]]:
@@ -206,7 +225,15 @@ class UltralyticsTracker:
         if not allowed_classes:
             return None
 
-        name_to_id = {v: k for k, v in self._model.names.items()}
+        names = self._resolve_model_names()
+        if not names:
+            print(
+                "Warning: could not read class names from the model; ignoring "
+                "allowed_classes (all classes will be detected)."
+            )
+            return None
+
+        name_to_id = {v: k for k, v in names.items()}
         ids = []
         for name in allowed_classes:
             if name in name_to_id:
