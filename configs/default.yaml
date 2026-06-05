@@ -9,6 +9,11 @@ detector:
   model: "models/yolov8n.pt"  # nano model for speed
   confidence_threshold: 0.5
   device: "cuda"  # or "cpu"
+  # FP16 (half-precision) inference. ~1.5-2x faster + half the VRAM on GPUs with
+  # Tensor Cores, with negligible accuracy loss. Only applied to .pt models on
+  # CUDA — ignored on CPU and for .onnx/.engine (their precision is fixed at
+  # export time via `export_model.py --half`). Override at runtime with --half.
+  half: false
   # Filter detections to specific classes only. null = detect all classes.
   # Use COCO class names, e.g.: ["person"] or ["person", "car", "truck"]
   allowed_classes: ["person"]

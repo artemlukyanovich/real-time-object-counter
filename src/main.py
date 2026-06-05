@@ -22,9 +22,11 @@ class ObjectCounterApp:
         self,
         config_path: str = "configs/default.yaml",
         source_override: Optional[Union[str, int]] = None,
+        half_override: Optional[bool] = None,
     ) -> None:
         self.config = Config(config_path)
         self.source_override = source_override
+        self.half_override = half_override
 
         self.video_source = None
         self.detector = None
@@ -48,7 +50,10 @@ class ObjectCounterApp:
         model = self.config.get("detector.model", "yolov8n.pt")
         confidence = self.config.get("detector.confidence_threshold", 0.5)
         device = self.config.get("detector.device", "cuda")
-        self.detector = ObjectDetector(model, confidence, device)
+        half = self.half_override
+        if half is None:
+            half = self.config.get("detector.half", False)
+        self.detector = ObjectDetector(model, confidence, device, half)
 
         fps = self._get_configured_fps()
         algorithm = self.config.get("tracker.algorithm", "bytetrack")
@@ -84,6 +89,7 @@ class ObjectCounterApp:
             appearance_threshold=appearance_threshold,
             allowed_classes=allowed_classes,
             device=self.detector.device,
+            half=self.detector.half,
         )
 
         print(
@@ -337,6 +343,15 @@ def parse_args() -> argparse.Namespace:
         help="Video source: webcam index or path to video file",
     )
 
+    parser.add_argument(
+        "--half",
+        dest="half",
+        action="store_true",
+        default=None,
+        help="Enable FP16 inference (overrides detector.half). "
+        "Only effective for .pt models on CUDA.",
+    )
+
     return parser.parse_args()
 
 
@@ -357,6 +372,7 @@ def main() -> None:
     app = ObjectCounterApp(
         config_path=args.config,
         source_override=source,
+        half_override=args.half,
     )
     app.run()
 

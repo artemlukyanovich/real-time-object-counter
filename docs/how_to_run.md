@@ -121,8 +121,14 @@ python -m src.main --config configs/default.yaml --source path/to/video.mp4
 |----------|-----|-------------|----------|
 | `--source` | int или str | из конфига (`video.source`) | Источник видео: `0` — камера, путь — файл |
 | `--config` | str | `configs/default.yaml` | Путь к YAML-конфигурации |
+| `--half` | flag | из конфига (`detector.half`) | Включает FP16-инференс. Эффективен только для `.pt`-моделей на CUDA |
 
-`--source` перекрывает значение `video.source` из конфига.
+`--source` перекрывает значение `video.source` из конфига. `--half` перекрывает `detector.half` (если флаг не указан — используется значение из конфига).
+
+```bash
+# FP16-инференс (ускорение ~1.5-2x на GPU с Tensor Cores):
+python -m src.main --source data/input/video.mp4 --half
+```
 
 ---
 

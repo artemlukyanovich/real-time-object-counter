@@ -21,6 +21,7 @@ class ObjectDetector:
         model_name: str = "yolov8n.pt",
         confidence_threshold: float = 0.5,
         device: str = "cuda",
+        half: bool = False,
     ) -> None:
         """Initialize detector.
 
@@ -28,13 +29,19 @@ class ObjectDetector:
             model_name: YOLO model file or model name, e.g. "yolov8n" or "yolov8n.pt".
             confidence_threshold: Minimum confidence score for detections.
             device: Device used for inference ("cuda" or "cpu").
+            half: Request FP16 (half-precision) inference. Only honoured for
+                native .pt models on CUDA — see ``_resolve_half``.
         """
         self.model_name = self._normalize_model_name(model_name)
         self.backend = self._detect_backend(self.model_name)
         self.confidence_threshold = confidence_threshold
         self.device = self._resolve_device(device, self.backend)
+        self.half = self._resolve_half(half, self.device, self.backend)
 
-        print(f"Detector backend: {self.backend} | device: {self.device}")
+        print(
+            f"Detector backend: {self.backend} | device: {self.device} | "
+            f"half: {self.half}"
+        )
 
         # Load YOLO model. Exported backends (.onnx / .engine) are already bound
         # to their own runtime/device, so only native PyTorch (.pt) models need
@@ -63,6 +70,7 @@ class ObjectDetector:
             conf=self.confidence_threshold,
             verbose=False,
             device=self.device,
+            half=self.half,
         )
 
         detections: List[Detection] = []
@@ -142,3 +150,28 @@ class ObjectDetector:
             return "cpu"
 
         return device
+
+    @staticmethod
+    def _resolve_half(half: bool, device: str, backend: str = "pytorch") -> bool:
+        """Resolve whether FP16 (half-precision) inference is actually usable.
+
+        FP16 is only applied to native PyTorch (.pt) models running on CUDA:
+        - Exported backends (.onnx / .engine) bake precision in at export time
+          (``export_model.py --half``), so the runtime flag is a no-op there.
+        - On CPU, FP16 is unsupported / slower than FP32, so it is ignored.
+        """
+        if not half:
+            return False
+
+        if backend != "pytorch":
+            print(
+                f"half=true ignored: precision for the '{backend}' backend is "
+                "fixed at export time (re-export with --half)."
+            )
+            return False
+
+        if device != "cuda":
+            print("half=true ignored: FP16 inference requires CUDA.")
+            return False
+
+        return True

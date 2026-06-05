@@ -86,6 +86,7 @@ class UltralyticsTracker:
         appearance_threshold: float = 0.25,
         allowed_classes: Optional[List[str]] = None,
         device: str = "cuda",
+        half: bool = False,
     ) -> None:
         """Initialise UltralyticsTracker.
 
@@ -119,6 +120,9 @@ class UltralyticsTracker:
                 Should match the device the shared model was loaded on. For ONNX
                 models this selects the ONNX Runtime execution provider; for
                 .pt / .engine the model is already bound to its device.
+            half: FP16 inference flag passed to model.track(). Should be the
+                value already resolved by ObjectDetector (only effective for
+                .pt models on CUDA).
         """
         if algorithm not in _SUPPORTED_ALGORITHMS:
             raise ValueError(
@@ -128,6 +132,7 @@ class UltralyticsTracker:
         self._model = model
         self._conf = conf_threshold
         self._device = device
+        self._half = half
         self.algorithm = algorithm
         self._allowed_class_ids = self._resolve_class_ids(allowed_classes)
         self._yaml_path = self._write_tracker_yaml(
@@ -167,6 +172,7 @@ class UltralyticsTracker:
             verbose=False,
             classes=self._allowed_class_ids,
             device=self._device,
+            half=self._half,
         )
 
         detections: List[Detection] = []
