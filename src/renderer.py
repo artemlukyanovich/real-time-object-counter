@@ -317,9 +317,10 @@ class FrameRenderer:
         )
         panel_w = max_w + padding_x * 2
 
-        # Position: top-right corner, below the FPS box (approx y=50).
+        # Position: top-right corner, below the FPS box (which may be two lines
+        # tall when frame skipping shows both throughput and inference FPS).
         x1 = w - panel_w - 10
-        y1 = 50
+        y1 = 84
         x2 = w - 10
         y2 = y1 + panel_h
 
@@ -339,12 +340,20 @@ class FrameRenderer:
 
         return frame
 
-    def render_fps(self, frame: np.ndarray, fps: float) -> np.ndarray:
+    def render_fps(
+        self,
+        frame: np.ndarray,
+        fps: float,
+        inference_fps: Optional[float] = None,
+    ) -> np.ndarray:
         """Render FPS metric on frame.
 
         Args:
             frame: Input frame.
-            fps: Current frames per second.
+            fps: Current throughput (display) frames per second.
+            inference_fps: Optional raw model inference rate. When provided (i.e.
+                frame skipping is active), it is shown on a second line so the
+                display rate and the true model cost can be read separately.
 
         Returns:
             Frame with rendered FPS.
@@ -352,26 +361,33 @@ class FrameRenderer:
         frame = frame.copy()
         h, w = frame.shape[:2]
 
-        text = f"FPS: {fps:.1f}"
-        text_size = cv2.getTextSize(text, self.font, self.font_size, 1)[0]
+        lines = [f"FPS: {fps:.1f}"]
+        if inference_fps is not None:
+            lines.append(f"infer: {inference_fps:.1f}")
 
-        x1 = w - text_size[0] - 24
+        line_h = 32
+        max_w = max(
+            cv2.getTextSize(t, self.font, self.font_size, 1)[0][0] for t in lines
+        )
+
+        x1 = w - max_w - 24
         y1 = 10
         x2 = w - 10
-        y2 = 42
+        y2 = y1 + line_h * len(lines)
 
         # Draw dark FPS background for stable readability.
         cv2.rectangle(frame, (x1, y1), (x2, y2), self.panel_bg_color, -1)
-        cv2.putText(
-            frame,
-            text,
-            (x1 + 8, 32),
-            self.font,
-            self.font_size,
-            self.metric_color,
-            1,
-            cv2.LINE_AA,
-        )
+        for i, text in enumerate(lines):
+            cv2.putText(
+                frame,
+                text,
+                (x1 + 8, 32 + i * line_h),
+                self.font,
+                self.font_size,
+                self.metric_color,
+                1,
+                cv2.LINE_AA,
+            )
 
         return frame
 

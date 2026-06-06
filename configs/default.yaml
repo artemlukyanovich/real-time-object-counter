@@ -14,6 +14,14 @@ detector:
   # CUDA — ignored on CPU and for .onnx/.engine (their precision is fixed at
   # export time via `export_model.py --half`). Override at runtime with --half.
   half: false
+  # Frame skipping: run the full detect+track pass only every N frames. On the
+  # skipped frames boxes are linearly extrapolated from the last two inference
+  # frames (so tracks stay smooth and line crossings still register), and
+  # counting is evaluated on inference frames only. 1 = disabled (detect every
+  # frame). N=2 ≈ -50% inference load, N=3 ≈ -66%, at the cost of higher
+  # ID-switch risk for fast motion. lost_track_buffer is auto-scaled by N so the
+  # lost-track window stays constant in seconds regardless of this value.
+  detect_interval: 1
   # Filter detections to specific classes only. null = detect all classes.
   # Use COCO class names, e.g.: ["person"] or ["person", "car", "truck"]
   allowed_classes: ["person"]
@@ -48,7 +56,9 @@ tracker:
 
   # How many frames to keep a lost track alive before discarding it.
   # null = auto-calculate from FPS: round(video.fps * auto_lost_track_buffer_seconds).
-  # Maps to: track_buffer
+  # Interpreted in source-video frames; when detector.detect_interval > 1 the
+  # value is divided by it (so the tracker, which only ticks on inference frames,
+  # keeps the same lost-track window in seconds). Maps to: track_buffer
   lost_track_buffer: null
   auto_lost_track_buffer_seconds: 3.0
 

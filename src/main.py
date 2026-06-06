@@ -2,7 +2,7 @@
 
 import argparse
 import time
-from typing import Dict, Optional, Union
+from typing import Dict, Optional, Tuple, Union
 
 import cv2
 
@@ -13,6 +13,7 @@ from src.tracker import UltralyticsTracker
 from src.counter import ObjectCounter
 from src.metrics import PerformanceMetrics
 from src.renderer import FrameRenderer
+from src.utils import get_centroid
 
 
 class ObjectCounterApp:
@@ -55,6 +56,9 @@ class ObjectCounterApp:
             half = self.config.get("detector.half", False)
         self.detector = ObjectDetector(model, confidence, device, half)
 
+        # Frame skipping: run detect+track only every N frames (1 = disabled).
+        self.detect_interval = max(1, int(self.config.get("detector.detect_interval", 1)))
+
         fps = self._get_configured_fps()
         algorithm = self.config.get("tracker.algorithm", "bytetrack")
         track_activation_threshold = self.config.get(
@@ -62,6 +66,11 @@ class ObjectCounterApp:
         )
         track_low_threshold = self.config.get("tracker.track_low_threshold", 0.1)
         lost_track_buffer = self._resolve_lost_track_buffer(fps)
+        # The tracker only ticks once per inference frame, so scale the buffer
+        # (configured in source-video frames) by the detection interval to keep
+        # the lost-track window constant in wall-clock seconds.
+        if self.detect_interval > 1:
+            lost_track_buffer = max(1, round(lost_track_buffer / self.detect_interval))
         matching_cost_threshold = self.config.get(
             "tracker.matching_cost_threshold", 0.8
         )
@@ -97,7 +106,8 @@ class ObjectCounterApp:
             f"fps={fps:.0f}, "
             f"activation_threshold={track_activation_threshold}, "
             f"lost_track_buffer={lost_track_buffer}, "
-            f"matching_cost_threshold={matching_cost_threshold}"
+            f"matching_cost_threshold={matching_cost_threshold}, "
+            f"detect_interval={self.detect_interval}"
         )
 
         crossing_lines = self.config.get("counter.crossing_lines", None)
@@ -190,6 +200,14 @@ class ObjectCounterApp:
 
         frame_idx = 0
 
+        # Frame-skipping cache: results from the last inference frame, reused
+        # (with linear extrapolation) on the frames in between.
+        self._last_detections = []
+        self._last_tracked = {}
+        self._last_counts = {}
+        self._track_velocity = {}
+        self._track_to_object_id = {}
+
         try:
             while True:
                 frame_start = time.perf_counter()
@@ -199,30 +217,18 @@ class ObjectCounterApp:
                     print("End of video stream or camera disconnected.")
                     break
 
-                detect_start = time.perf_counter()
-                detections, tracked_objects = self.tracker.update(frame)
-                elapsed = time.perf_counter() - detect_start
-                self.metrics.record_detection_time(elapsed)
-                self.metrics.record_tracking_time(0.0)
-
-                track_to_object_id: Dict[int, int] = {}
-                if self.reid_manager is not None:
-                    if frame_idx % self._reid_interval == 0:
-                        track_to_object_id = self.reid_manager.update(
-                            frame, tracked_objects, frame_idx
-                        )
-                    else:
-                        # Reuse last-known object IDs for the current tracks
-                        track_to_object_id = {
-                            tid: self.reid_manager.get_object_id(tid)
-                            for tid in tracked_objects
-                            if self.reid_manager.get_object_id(tid) is not None
-                        }
-
-                counts = self.counter.update(tracked_objects)
+                is_inference_frame = frame_idx % self.detect_interval == 0
+                if is_inference_frame:
+                    detections, tracked_objects, counts = self._process_inference_frame(
+                        frame, frame_idx
+                    )
+                else:
+                    detections, tracked_objects, counts = self._process_skipped_frame(
+                        frame_idx
+                    )
 
                 frame = self._render_frame(
-                    frame, detections, tracked_objects, counts, track_to_object_id
+                    frame, detections, tracked_objects, counts, self._track_to_object_id
                 )
 
                 self.metrics.record_frame_time(time.perf_counter() - frame_start)
@@ -236,6 +242,68 @@ class ObjectCounterApp:
 
         finally:
             self.cleanup()
+
+    def _process_inference_frame(self, frame, frame_idx: int):
+        """Run the full detect+track+count pass and refresh the skip cache."""
+        detect_start = time.perf_counter()
+        detections, tracked_objects = self.tracker.update(frame)
+        self.metrics.record_detection_time(time.perf_counter() - detect_start)
+        self.metrics.record_tracking_time(0.0)
+
+        # Estimate per-frame velocity of each track from the displacement since
+        # the previous inference frame; used to extrapolate boxes on skipped
+        # frames. The displacement spans detect_interval real frames.
+        velocity: Dict[int, Tuple[float, float]] = {}
+        for track_id, (bbox, _) in tracked_objects.items():
+            prev = self._last_tracked.get(track_id)
+            if prev is not None:
+                pcx, pcy = get_centroid(prev[0])
+                ccx, ccy = get_centroid(bbox)
+                velocity[track_id] = (
+                    (ccx - pcx) / self.detect_interval,
+                    (ccy - pcy) / self.detect_interval,
+                )
+        self._track_velocity = velocity
+
+        if self.reid_manager is not None:
+            if frame_idx % self._reid_interval == 0:
+                self._track_to_object_id = self.reid_manager.update(
+                    frame, tracked_objects, frame_idx
+                )
+            else:
+                self._track_to_object_id = {
+                    tid: self.reid_manager.get_object_id(tid)
+                    for tid in tracked_objects
+                    if self.reid_manager.get_object_id(tid) is not None
+                }
+
+        counts = self.counter.update(tracked_objects)
+
+        self._last_detections = detections
+        self._last_tracked = tracked_objects
+        self._last_counts = counts
+        return detections, tracked_objects, counts
+
+    def _process_skipped_frame(self, frame_idx: int):
+        """Reuse the last inference results, extrapolating track boxes forward.
+
+        Counting is intentionally not re-run here: boxes are predicted, not
+        observed, so re-counting could double-count or register phantom line
+        crossings. Detection boxes are frozen (the raw detection layer has no
+        track identity to extrapolate); track boxes are shifted by their
+        estimated velocity so overlays and centroids stay smooth.
+        """
+        k = frame_idx % self.detect_interval
+        tracked_objects: Dict[int, Tuple[Tuple[int, int, int, int], str]] = {}
+        for track_id, (bbox, class_name) in self._last_tracked.items():
+            vx, vy = self._track_velocity.get(track_id, (0.0, 0.0))
+            dx, dy = round(vx * k), round(vy * k)
+            x1, y1, x2, y2 = bbox
+            tracked_objects[track_id] = (
+                (x1 + dx, y1 + dy, x2 + dx, y2 + dy),
+                class_name,
+            )
+        return self._last_detections, tracked_objects, self._last_counts
 
     def _render_frame(
         self,
@@ -293,7 +361,10 @@ class ObjectCounterApp:
             )
 
         fps = self.metrics.get_fps()
-        frame = self.renderer.render_fps(frame, fps)
+        inference_fps = (
+            self.metrics.get_inference_fps() if self.detect_interval > 1 else None
+        )
+        frame = self.renderer.render_fps(frame, fps, inference_fps=inference_fps)
 
         return frame
 

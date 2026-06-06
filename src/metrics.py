@@ -35,11 +35,26 @@ class PerformanceMetrics:
         self.tracking_times.append(elapsed)
 
     def get_fps(self) -> float:
-        """Get current FPS."""
+        """Get current throughput FPS (frames pushed to the display per second).
+
+        With frame skipping enabled this counts every output frame, including the
+        cheap skipped frames where boxes are extrapolated rather than re-detected.
+        """
         if not self.frame_times:
             return 0.0
         avg_frame_time = sum(self.frame_times) / len(self.frame_times)
         return 1.0 / avg_frame_time if avg_frame_time > 0 else 0.0
+
+    def get_inference_fps(self) -> float:
+        """Get the model's raw inference rate (inferences per second).
+
+        Derived from the time spent inside the detect+track pass only, so it
+        reflects the true model cost regardless of how many frames are skipped.
+        """
+        if not self.detection_times:
+            return 0.0
+        avg = sum(self.detection_times) / len(self.detection_times)
+        return 1.0 / avg if avg > 0 else 0.0
 
     def get_average_detection_time(self) -> float:
         """Get average detection time in ms."""
@@ -57,6 +72,7 @@ class PerformanceMetrics:
         """Get metrics summary."""
         return {
             'fps': self.get_fps(),
+            'inference_fps': self.get_inference_fps(),
             'avg_detection_time_ms': self.get_average_detection_time(),
             'avg_tracking_time_ms': self.get_average_tracking_time(),
             'total_frames': self.frame_count,

@@ -10,12 +10,15 @@ video:
 #  frame_height: 360
 
 detector:
-  model: "models/yolov8n.pt"  # nano model for speed
+#  model: "models/yolov8n.pt"  # nano model for speed
+  model: "models/yolov8m.pt"  # small model for accuracy
 #  model: "custom_models/final/custom_final_1/weights/best.pt"  # компромисс: скорость/точность
   confidence_threshold: 0.5
   device: "cuda"  # or "cpu"
 #  allowed_classes: ["person", "taar", "arx", "the_institute"]  # Use COCO class names, e.g.: ["person"] or ["person", "car", "truck"]
   allowed_classes: null  # Use COCO class names, e.g.: ["person"] or ["person", "car", "truck"]
+  half: true  # defaults to false
+  detect_interval: 2  # defaults to 1
 
 tracker:
   # Tracking algorithm. Options: "bytetrack" | "botsort" | "botsort_reid"
