@@ -18,6 +18,7 @@ class PerformanceMetrics:
         self.frame_times = deque(maxlen=window_size)
         self.detection_times = deque(maxlen=window_size)
         self.tracking_times = deque(maxlen=window_size)
+        self.io_wait_times = deque(maxlen=window_size)
         self.frame_count = 0
         self.start_time = time.time()
 
@@ -33,6 +34,16 @@ class PerformanceMetrics:
     def record_tracking_time(self, elapsed: float) -> None:
         """Record tracking processing time."""
         self.tracking_times.append(elapsed)
+
+    def record_io_wait(self, elapsed: float) -> None:
+        """Record time the main loop spent waiting for the next frame.
+
+        In the synchronous pipeline this is the decode time sitting on the
+        critical path; with the async pipeline it is the time blocked on the
+        frame queue, which should approach zero when decode is faster than
+        inference. The single clearest indicator of the async speedup.
+        """
+        self.io_wait_times.append(elapsed)
 
     def get_fps(self) -> float:
         """Get current throughput FPS (frames pushed to the display per second).
@@ -68,6 +79,12 @@ class PerformanceMetrics:
             return 0.0
         return (sum(self.tracking_times) / len(self.tracking_times)) * 1000
 
+    def get_average_io_wait(self) -> float:
+        """Get average per-frame I/O wait in ms (see record_io_wait)."""
+        if not self.io_wait_times:
+            return 0.0
+        return (sum(self.io_wait_times) / len(self.io_wait_times)) * 1000
+
     def get_summary(self) -> Dict[str, float]:
         """Get metrics summary."""
         return {
@@ -75,6 +92,7 @@ class PerformanceMetrics:
             'inference_fps': self.get_inference_fps(),
             'avg_detection_time_ms': self.get_average_detection_time(),
             'avg_tracking_time_ms': self.get_average_tracking_time(),
+            'avg_io_wait_ms': self.get_average_io_wait(),
             'total_frames': self.frame_count,
             'elapsed_seconds': time.time() - self.start_time,
         }
@@ -84,5 +102,6 @@ class PerformanceMetrics:
         self.frame_times.clear()
         self.detection_times.clear()
         self.tracking_times.clear()
+        self.io_wait_times.clear()
         self.frame_count = 0
         self.start_time = time.time()

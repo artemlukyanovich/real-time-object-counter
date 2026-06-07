@@ -4,6 +4,8 @@ video:
   fallback_fps: 30  # used when fps is null and the source reports 0 or nothing
   frame_width: 1280
   frame_height: 720
+  async_pipeline: true   # defaults to true; false = synchronous read
+  drop_policy: "auto"    # auto | block | drop (live=drop, file=block); defaults to "auto"
 #  frame_width: 960
 #  frame_height: 540
 #  frame_width: 640

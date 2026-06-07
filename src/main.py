@@ -46,7 +46,20 @@ class ObjectCounterApp:
 
         width = self.config.get("video.frame_width", 1280)
         height = self.config.get("video.frame_height", 720)
-        self.video_source = VideoSource(source, width, height)
+        async_pipeline = self.config.get("video.async_pipeline", True)
+        drop_policy = self.config.get("video.drop_policy", "auto")
+        self.video_source = VideoSource(
+            source,
+            width,
+            height,
+            threaded=async_pipeline,
+            drop_policy=drop_policy,
+        )
+        if async_pipeline:
+            mode = "drop-oldest" if self.video_source.drops_frames else "block/no-drop"
+            print(f"Video: async pipeline ON | drop_policy={drop_policy} ({mode})")
+        else:
+            print("Video: synchronous (async pipeline OFF)")
 
         model = self.config.get("detector.model", "yolov8n.pt")
         confidence = self.config.get("detector.confidence_threshold", 0.5)
@@ -213,6 +226,7 @@ class ObjectCounterApp:
                 frame_start = time.perf_counter()
 
                 success, frame = self.video_source.read()
+                self.metrics.record_io_wait(time.perf_counter() - frame_start)
                 if not success:
                     print("End of video stream or camera disconnected.")
                     break

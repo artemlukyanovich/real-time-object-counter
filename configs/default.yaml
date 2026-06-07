@@ -5,6 +5,20 @@ video:
   frame_width: 1280
   frame_height: 720
 
+  # Async pipeline: decode + resize frames in a background thread so decoding
+  # overlaps with inference instead of sitting on the critical path. Kept as a
+  # toggle mainly to A/B-measure the speedup and as a fallback when debugging.
+  # true = recommended; false = synchronous single-threaded read.
+  async_pipeline: true
+
+  # Frame-drop policy for the async pipeline (ignored when async_pipeline: false).
+  #   auto  = drop for live sources (camera/drone — stay current, shed load on
+  #           weak hardware), keep every frame for video files (deterministic).
+  #   block = never drop; reader blocks when the queue is full (backpressure).
+  #   drop  = keep only the freshest frame (minimal latency; skips frames when
+  #           inference can't keep up). Use to load-test a file as a live stream.
+  drop_policy: "auto"
+
 detector:
   model: "models/yolov8n.pt"  # nano model for speed
   confidence_threshold: 0.5
